@@ -1,4 +1,4 @@
-/* Formatted on 8/2/2021 12:44:47 PM (QP5 v5.371) */
+/* Formatted on 8/4/2021 1:42:06 PM (QP5 v5.336) */
 CREATE OR REPLACE PACKAGE BANINST1.z_campuslogic_interface
 AS
   PROCEDURE p_tracking_upd_api (p_pidm        VARCHAR2,
@@ -15,7 +15,6 @@ AS
                            p_eventDateTime             VARCHAR2:= NULL,
                            p_sfTransactionCategoryId   INTEGER:= NULL,
                            p_sfDocumentName            VARCHAR2:= NULL,
-                           p_suTermId                  VARCHAR2:= NULL,
                            p_suTermName                VARCHAR2:= NULL,
                            p_suScholarshipAwardId      VARCHAR2:= NULL,
                            p_suScholarshipName         VARCHAR2:= NULL,

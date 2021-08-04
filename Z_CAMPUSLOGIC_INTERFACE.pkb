@@ -1,4 +1,4 @@
-/* Formatted on 8/2/2021 12:59:50 PM (QP5 v5.371) */
+/* Formatted on 8/4/2021 1:42:16 PM (QP5 v5.336) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -295,7 +295,7 @@ AS
                            p_eventDateTime             VARCHAR2:= NULL,
                            p_sfTransactionCategoryId   INTEGER:= NULL,
                            p_sfDocumentName            VARCHAR2:= NULL,
-                           p_suTermId                  VARCHAR2:= NULL,
+                           p_suTermName                VARCHAR2:= NULL,
                            p_suScholarshipAwardId      VARCHAR2:= NULL,
                            p_suScholarshipName         VARCHAR2:= NULL,
                            p_suScholarshipCode         VARCHAR2:= NULL,
@@ -352,7 +352,7 @@ AS
                    p_eventNotificationId,
                    p_sfTransactionCategoryId,
                    p_sfDocumentName,
-                   p_suTermId,
+                   p_suTermName,
                    p_suScholarshipAwardId,
                    p_suScholarshipName,
                    p_suScholarshipCode,
@@ -411,19 +411,19 @@ AS
           'ERROR: award year is invalid: ' || p_awardYear);
     END;
 
-    -- Determine if p_suTermId is valid.
-    IF p_suTermId != NULL
+    -- Determine if p_suTermName is valid.
+    IF p_suTermName != NULL
     THEN
       BEGIN
         SELECT stvterm_code
           INTO v_term
           FROM stvterm
-         WHERE stvterm_code = p_suTermId;
+         WHERE UPPER (stvterm_desc) = UPPER (p_suTermName);
       EXCEPTION
         WHEN NO_DATA_FOUND
         THEN
           DBMS_OUTPUT.PUT_LINE (
-            'ERROR: term code is invalid: ' || p_suTermId);
+            'ERROR: term desc is invalid: ' || p_suTermName);
       END;
     END IF;
 
