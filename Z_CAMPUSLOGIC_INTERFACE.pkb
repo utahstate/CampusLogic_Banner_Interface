@@ -296,7 +296,6 @@ AS
                            p_sfTransactionCategoryId   INTEGER:= NULL,
                            p_sfDocumentName            VARCHAR2:= NULL,
                            p_suTermId                  VARCHAR2:= NULL,
-                           p_suTermName                VARCHAR2:= NULL,
                            p_suScholarshipAwardId      VARCHAR2:= NULL,
                            p_suScholarshipName         VARCHAR2:= NULL,
                            p_suScholarshipCode         VARCHAR2:= NULL,
