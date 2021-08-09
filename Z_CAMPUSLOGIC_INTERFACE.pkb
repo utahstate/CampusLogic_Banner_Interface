@@ -1,4 +1,4 @@
-/* Formatted on 8/4/2021 1:42:16 PM (QP5 v5.336) */
+/* Formatted on 8/9/2021 1:47:01 PM (QP5 v5.336) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -35,6 +35,7 @@ AS
     1.4      20190417  Carl Ellsworth, USU  added handling for 209 events
     1.4.1    20190429  Carl Ellsworth, USU  changed 209 logic to ROBNYUD update
     2.0      20210802  Miles Canfield, USU  expansion to accomadate Scholarship Universe
+    2.0.1    20210809  Carl & Miles, USU    logic changes for cl-connect limitations
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -207,14 +208,13 @@ AS
   /**
   * Updates tracking index for document in BDMS, B-R-TREQ application (ae_dt507)
   */
-  PROCEDURE p_update_xtender (
-    p_studentId             VARCHAR2,
-    p_studentPidm           INTEGER,
-    p_awardYear             VARCHAR2,
-    p_documentName          VARCHAR2,
-    p_treqCode              rrrareq.rrrareq_treq_code%TYPE,
-    p_status                VARCHAR2,
-    p_eventNotificationId   INTEGER)
+  PROCEDURE p_update_xtender (p_studentId             VARCHAR2,
+                              p_studentPidm           INTEGER,
+                              p_awardYear             VARCHAR2,
+                              p_documentName          VARCHAR2,
+                              p_treqCode              VARCHAR2,
+                              p_status                VARCHAR2,
+                              p_eventNotificationId   INTEGER)
   AS
     record_count   NUMBER;
   BEGIN
@@ -288,26 +288,28 @@ AS
   * with the full path to this procedure, BANINST1.z_campuslogic_interface.p_transaction
   */
   PROCEDURE p_transaction (p_studentId                 VARCHAR2,
-                           p_awardYear                 VARCHAR2,
                            p_eventNotificationId       INTEGER,
-                           p_eventId                   VARCHAR2:= NULL,
-                           p_eventNotificationName     VARCHAR2:= NULL,
-                           p_eventDateTime             VARCHAR2:= NULL,
-                           p_sfTransactionCategoryId   INTEGER:= NULL,
-                           p_sfDocumentName            VARCHAR2:= NULL,
-                           p_suTermName                VARCHAR2:= NULL,
-                           p_suScholarshipAwardId      VARCHAR2:= NULL,
-                           p_suScholarshipName         VARCHAR2:= NULL,
-                           p_suScholarshipCode         VARCHAR2:= NULL,
-                           p_suAmount                  NUMBER:= NULL,
-                           p_suPostBatchUser           VARCHAR2:= NULL,
-                           p_suPostType                VARCHAR2:= NULL,
-                           p_suTermComments            VARCHAR2:= NULL)
+                           p_eventId                   VARCHAR2 DEFAULT NULL,
+                           p_eventNotificationName     VARCHAR2 DEFAULT NULL,
+                           p_eventDateTime             VARCHAR2 DEFAULT NULL,
+                           p_sfAwardYear               VARCHAR2 DEFAULT NULL,
+                           p_sfTransactionCategoryId   INTEGER DEFAULT NULL,
+                           p_sfDocumentName            VARCHAR2 DEFAULT NULL,
+                           p_suAwardYearName           VARCHAR2 DEFAULT NULL,
+                           p_suTermName                VARCHAR2 DEFAULT NULL,
+                           p_suScholarshipAwardId      VARCHAR2 DEFAULT NULL,
+                           p_suScholarshipName         VARCHAR2 DEFAULT NULL,
+                           p_suScholarshipCode         VARCHAR2 DEFAULT NULL,
+                           p_suAmount                  NUMBER DEFAULT NULL,
+                           p_suPostBatchUser           VARCHAR2 DEFAULT NULL,
+                           p_suPostType                VARCHAR2 DEFAULT NULL,
+                           p_suTermComments            VARCHAR2 DEFAULT NULL)
   AS
     v_record_count                    NUMBER;
     v_student_pidm                    NUMBER := NULL;
+    v_aidy_code                       VARCHAR2 (4) := NULL;
+    v_fa_proc_yr                      VARCHAR2 (4) := NULL;
     v_elog_rowid                      ROWID;
-    v_aidy_code                       VARCHAR2 (4);
     v_term                            VARCHAR2 (6);
     v_errm                            VARCHAR2 (4000);
     v_sqlc                            VARCHAR2 (4000);
@@ -316,12 +318,51 @@ AS
     v_treq_code                       rrrareq.rrrareq_treq_code%TYPE;
     --update this constant to your Banner overall verify code for RRRAREQ
     v_banner_verify_code              rrrareq.rrrareq_treq_code%TYPE
-                                        := f_verify_code (p_awardYear);
+      := f_verify_code (COALESCE (p_sfAwardYear, p_suAwardYearName, NULL));
     v_banner_sap_code        CONSTANT rrrareq.rrrareq_treq_code%TYPE := 'SAP';
     v_banner_pj_code         CONSTANT rrrareq.rrrareq_treq_code%TYPE := 'PROJUD';
     v_banner_creation_code   CONSTANT rrrareq.rrrareq_treq_code%TYPE
                                         := 'ACCTCL' ;
   BEGIN
+    --Determine if StudentID matches a single record in Banner
+    BEGIN
+      SELECT spriden_pidm
+        INTO v_student_pidm
+        FROM spriden
+       WHERE spriden_change_ind IS NULL AND spriden_id = p_studentId;
+    EXCEPTION
+      WHEN NO_DATA_FOUND
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+          'ERROR: student not found for studentID ' || p_studentId);
+      WHEN TOO_MANY_ROWS
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+          'ERROR: duplicate pidm issue for studentID ' || p_studentId);
+    END;
+
+    --Determine if Aid Year exists in Banner
+    BEGIN
+      SELECT robinst_aidy_code
+        INTO v_aidy_code
+        FROM robinst
+       WHERE robinst_aidy_code =
+             COALESCE (p_sfAwardYear, p_suAwardYearName, '0000');
+    EXCEPTION
+      WHEN NO_DATA_FOUND
+      THEN
+        v_aidy_code := NULL;
+        DBMS_OUTPUT.PUT_LINE (
+             'ERROR: award year is invalid: '
+          || COALESCE (p_sfAwardYear, p_suAwardYearName, NULL));
+      WHEN TOO_MANY_ROWS
+      THEN
+        v_aidy_code := NULL;
+        DBMS_OUTPUT.PUT_LINE (
+             'ERROR: award year is invalid: '
+          || COALESCE (p_sfAwardYear, p_suAwardYearName, NULL));
+    END;
+
     --log the incoming transaction
     BEGIN
       INSERT INTO baninst1.zclelog (zclelog_studentid,
@@ -345,7 +386,7 @@ AS
                                     zclelog_create_date)
            VALUES (p_studentId,
                    NULL,
-                   p_awardYear,
+                   COALESCE (p_sfAwardYear, p_suAwardYearName, NULL),
                    p_eventId,
                    p_eventNotificationName,
                    p_eventDateTime,
@@ -371,52 +412,12 @@ AS
           'ERROR: failed to insert event notification into ZCLELOG');
     END;
 
-    --determine if StudentID matches a single record in Banner
-    BEGIN
-      SELECT spriden_pidm
-        INTO v_student_pidm
-        FROM spriden
-       WHERE spriden_change_ind IS NULL AND spriden_id = p_studentId;
-    EXCEPTION
-      WHEN NO_DATA_FOUND
-      THEN
-        DBMS_OUTPUT.PUT_LINE (
-          'ERROR: student not found for studentID ' || p_studentId);
-      WHEN TOO_MANY_ROWS
-      THEN
-        DBMS_OUTPUT.PUT_LINE (
-          'ERROR: duplicate pidm issue for studentID ' || p_studentId);
-    END;
-
-    -- Set pidm if it can be found and there is no duplicate pidm.
-    UPDATE baninst1.zclelog
-       SET zclelog_pidm = v_student_pidm;
-
-    COMMIT;
-
-    --Determine if p_awardYear exists in Banner
-    BEGIN
-      SELECT robinst_aidy_code
-        INTO v_aidy_code
-        FROM robinst
-       WHERE robinst_aidy_code = NVL (p_awardYear, '0000');
-    EXCEPTION
-      WHEN NO_DATA_FOUND
-      THEN
-        DBMS_OUTPUT.PUT_LINE (
-          'ERROR: award year is invalid: ' || p_awardYear);
-      WHEN TOO_MANY_ROWS
-      THEN
-        DBMS_OUTPUT.PUT_LINE (
-          'ERROR: award year is invalid: ' || p_awardYear);
-    END;
-
     -- Determine if p_suTermName is valid.
     IF p_suTermName != NULL
     THEN
       BEGIN
-        SELECT stvterm_code
-          INTO v_term
+        SELECT stvterm_code, stvterm_fa_proc_yr
+          INTO v_term, v_fa_proc_yr
           FROM stvterm
          WHERE UPPER (stvterm_desc) = UPPER (p_suTermName);
       EXCEPTION
@@ -426,6 +427,24 @@ AS
             'ERROR: term desc is invalid: ' || p_suTermName);
       END;
     END IF;
+
+    -- Custom Error Block
+    CASE
+      WHEN v_student_pidm IS NULL
+      THEN
+        raise_application_error (
+          -20404,
+          'ERROR: student pidm not found for ' || p_studentId);
+      WHEN (p_sfAwardYear IS NULL AND p_suAwardYearName IS NULL)
+      THEN
+        raise_application_error (
+          -20400,
+          'ERROR: aid year or aid year name is required to process transaction');
+      WHEN (v_fa_proc_yr IS NOT NULL AND v_aidy_code <> v_fa_proc_yr)
+      THEN
+        raise_application_error (-20400,
+                                 'ERROR: term code and aid year mismatch');
+    END CASE;
 
     --BANNER LOGIC
 
@@ -462,7 +481,7 @@ AS
                                 p_status      => 'C',           --from RTVTRST
                                 p_sysInd      => 'B');
             p_status_upd_api (p_pidm          => v_student_pidm,
-                              p_awardYear     => p_awardYear,
+                              p_awardYear     => v_aidy_code,
                               p_verPayInd     => 'V',
                               p_verComplete   => 'Y');
           WHEN NVL (p_sfTransactionCategoryId, 0) = 2             --SAP Appeal
