@@ -1,4 +1,4 @@
-/* Formatted on 8/9/2021 1:47:01 PM (QP5 v5.336) */
+/* Formatted on 8/9/2021 1:51:08 PM (QP5 v5.336) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -36,6 +36,7 @@ AS
     1.4.1    20190429  Carl Ellsworth, USU  changed 209 logic to ROBNYUD update
     2.0      20210802  Miles Canfield, USU  expansion to accomadate Scholarship Universe
     2.0.1    20210809  Carl & Miles, USU    logic changes for cl-connect limitations
+    2.0.2                                   removal of USU specific block
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -262,26 +263,6 @@ AS
   END p_update_xtender;
 
   /**
-  * Function used to change verify_code based on aid year
-  *
-  * USU needed to change the verify code for clarity starting aid year '1819'
-  */
-  FUNCTION f_verify_code (p_awardYear VARCHAR2)
-    RETURN VARCHAR2
-  IS
-    v_banner_verify_code   rrrareq.rrrareq_treq_code%TYPE;
-  BEGIN
-    IF p_awardYear >= '1819'
-    THEN
-      v_banner_verify_code := 'CLOGIC';
-    ELSE
-      v_banner_verify_code := 'VERIFY';
-    END IF;
-
-    RETURN v_banner_verify_code;
-  END;
-
-  /**
   * Proceudre called from CL Connect
   *
   * In Web.config on the CL Connect server, populate the field dbCommandFieldValue
@@ -316,9 +297,8 @@ AS
 
     v_status                          VARCHAR2 (1);
     v_treq_code                       rrrareq.rrrareq_treq_code%TYPE;
-    --update this constant to your Banner overall verify code for RRRAREQ
-    v_banner_verify_code              rrrareq.rrrareq_treq_code%TYPE
-      := f_verify_code (COALESCE (p_sfAwardYear, p_suAwardYearName, NULL));
+    --update these constants to your Banner specific needs
+    v_banner_verify_code              rrrareq.rrrareq_treq_code%TYPE := 'CLOGIC';
     v_banner_sap_code        CONSTANT rrrareq.rrrareq_treq_code%TYPE := 'SAP';
     v_banner_pj_code         CONSTANT rrrareq.rrrareq_treq_code%TYPE := 'PROJUD';
     v_banner_creation_code   CONSTANT rrrareq.rrrareq_treq_code%TYPE
