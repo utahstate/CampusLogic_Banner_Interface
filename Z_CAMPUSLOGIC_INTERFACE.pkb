@@ -276,7 +276,6 @@ AS
                            p_sfAwardYear               VARCHAR2 DEFAULT NULL,
                            p_sfTransactionCategoryId   INTEGER DEFAULT NULL,
                            p_sfDocumentName            VARCHAR2 DEFAULT NULL,
-                           p_suAwardYearName           VARCHAR2 DEFAULT NULL,
                            p_suTermName                VARCHAR2 DEFAULT NULL,
                            p_suScholarshipAwardId      VARCHAR2 DEFAULT NULL,
                            p_suScholarshipName         VARCHAR2 DEFAULT NULL,
@@ -289,11 +288,7 @@ AS
     v_record_count                    NUMBER;
     v_student_pidm                    NUMBER := NULL;
     v_aidy_code                       VARCHAR2 (4) := NULL;
-    v_fa_proc_yr                      VARCHAR2 (4) := NULL;
-    v_elog_rowid                      ROWID;
     v_term                            VARCHAR2 (6);
-    v_errm                            VARCHAR2 (4000);
-    v_sqlc                            VARCHAR2 (4000);
 
     v_status                          VARCHAR2 (1);
     v_treq_code                       rrrareq.rrrareq_treq_code%TYPE;
@@ -322,26 +317,44 @@ AS
     END;
 
     --Determine if Aid Year exists in Banner
-    BEGIN
-      SELECT robinst_aidy_code
-        INTO v_aidy_code
-        FROM robinst
-       WHERE robinst_aidy_code =
-             COALESCE (p_sfAwardYear, p_suAwardYearName, '0000');
-    EXCEPTION
-      WHEN NO_DATA_FOUND
-      THEN
-        v_aidy_code := NULL;
-        DBMS_OUTPUT.PUT_LINE (
-             'ERROR: award year is invalid: '
-          || COALESCE (p_sfAwardYear, p_suAwardYearName, NULL));
-      WHEN TOO_MANY_ROWS
-      THEN
-        v_aidy_code := NULL;
-        DBMS_OUTPUT.PUT_LINE (
-             'ERROR: award year is invalid: '
-          || COALESCE (p_sfAwardYear, p_suAwardYearName, NULL));
-    END;
+    IF p_sfAwardYear IS NOT NULL
+    THEN
+        BEGIN
+            SELECT robinst_aidy_code
+            INTO v_aidy_code
+            FROM robinst
+            WHERE robinst_aidy_code =
+                  COALESCE (p_sfAwardYear, p_suAwardYearName, '0000');
+        EXCEPTION
+            WHEN NO_DATA_FOUND
+                THEN
+                    v_aidy_code := NULL;
+                    DBMS_OUTPUT.PUT_LINE (
+                                'ERROR: award year is invalid: ' || p_sfAwardYear);
+            WHEN TOO_MANY_ROWS
+                THEN
+                    v_aidy_code := NULL;
+                    DBMS_OUTPUT.PUT_LINE (
+                                'ERROR: award year is invalid: ' || p_sfAwardYear);
+        END;
+    END IF;
+
+    -- Determine if p_suTermName is valid and get aidy_code.
+    IF p_suTermName IS NOT NULL
+    THEN
+        BEGIN
+            SELECT stvterm_code, stvterm_fa_proc_yr
+            INTO v_term, v_aidy_code
+            FROM stvterm
+            WHERE UPPER (stvterm_desc) = UPPER (p_suTermName);
+        EXCEPTION
+            WHEN NO_DATA_FOUND
+                THEN
+                    v_aidy_code := NULL;
+                    DBMS_OUTPUT.PUT_LINE (
+                                'ERROR: term desc is invalid: ' || p_suTermName);
+        END;
+    END IF;
 
     --log the incoming transaction
     BEGIN
@@ -366,7 +379,7 @@ AS
                                     zclelog_create_date)
            VALUES (p_studentId,
                    NULL,
-                   COALESCE (p_sfAwardYear, p_suAwardYearName, NULL),
+                   v_aidy_code,
                    p_eventId,
                    p_eventNotificationName,
                    p_eventDateTime,
@@ -392,22 +405,6 @@ AS
           'ERROR: failed to insert event notification into ZCLELOG');
     END;
 
-    -- Determine if p_suTermName is valid.
-    IF p_suTermName != NULL
-    THEN
-      BEGIN
-        SELECT stvterm_code, stvterm_fa_proc_yr
-          INTO v_term, v_fa_proc_yr
-          FROM stvterm
-         WHERE UPPER (stvterm_desc) = UPPER (p_suTermName);
-      EXCEPTION
-        WHEN NO_DATA_FOUND
-        THEN
-          DBMS_OUTPUT.PUT_LINE (
-            'ERROR: term desc is invalid: ' || p_suTermName);
-      END;
-    END IF;
-
     -- Custom Error Block
     CASE
       WHEN v_student_pidm IS NULL
@@ -415,15 +412,11 @@ AS
         raise_application_error (
           -20404,
           'ERROR: student pidm not found for ' || p_studentId);
-      WHEN (p_sfAwardYear IS NULL AND p_suAwardYearName IS NULL)
+      WHEN (p_sfAwardYear IS NULL AND p_suTermName IS NULL)
       THEN
         raise_application_error (
           -20400,
-          'ERROR: aid year or aid year name is required to process transaction');
-      WHEN (v_fa_proc_yr IS NOT NULL AND v_aidy_code <> v_fa_proc_yr)
-      THEN
-        raise_application_error (-20400,
-                                 'ERROR: term code and aid year mismatch');
+          'ERROR: aid year or term name is required to process transaction');
     END CASE;
 
     --BANNER LOGIC
