@@ -552,18 +552,18 @@ AS
   * with the full path to this procedure, BANINST1.z_campuslogic_interface.p_su_transaction
   */
   PROCEDURE p_su_transaction (p_studentId                 VARCHAR2,
-                           p_eventNotificationId       INTEGER,
-                           p_eventId                   VARCHAR2 DEFAULT NULL,
-                           p_eventNotificationName     VARCHAR2 DEFAULT NULL,
-                           p_eventDateTime             VARCHAR2 DEFAULT NULL,
-                           p_suTermName                VARCHAR2 DEFAULT NULL,
-                           p_suScholarshipAwardId      VARCHAR2 DEFAULT NULL,
-                           p_suScholarshipName         VARCHAR2 DEFAULT NULL,
-                           p_suScholarshipCode         VARCHAR2 DEFAULT NULL,
-                           p_suAmount                  NUMBER DEFAULT NULL,
-                           p_suPostBatchUser           VARCHAR2 DEFAULT NULL,
-                           p_suPostType                VARCHAR2 DEFAULT NULL,
-                           p_suTermComments            VARCHAR2 DEFAULT NULL)
+                              p_eventNotificationId       INTEGER,
+                              p_eventId                   VARCHAR2 DEFAULT NULL,
+                              p_eventNotificationName     VARCHAR2 DEFAULT NULL,
+                              p_eventDateTime             VARCHAR2 DEFAULT NULL,
+                              p_suTermName                VARCHAR2 DEFAULT NULL,
+                              p_suScholarshipAwardId      VARCHAR2 DEFAULT NULL,
+                              p_suScholarshipName         VARCHAR2 DEFAULT NULL,
+                              p_suScholarshipCode         VARCHAR2 DEFAULT NULL,
+                              p_suAmount                  NUMBER DEFAULT NULL,
+                              p_suPostBatchUser           VARCHAR2 DEFAULT NULL,
+                              p_suPostType                VARCHAR2 DEFAULT NULL,
+                              p_suTermComments            VARCHAR2 DEFAULT NULL)
   AS
     v_student_pidm                    NUMBER := NULL;
     v_aidy_code                       VARCHAR2 (4) := NULL;
