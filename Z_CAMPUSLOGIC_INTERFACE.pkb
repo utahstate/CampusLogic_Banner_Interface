@@ -262,20 +262,300 @@ AS
     END IF;
   END p_update_xtender;
 
+
   /**
-  * Proceudre called from CL Connect
+  * Procedure called from CL Connect for Student Forms transactions
   *
   * In Web.config on the CL Connect server, populate the field dbCommandFieldValue
-  * with the full path to this procedure, BANINST1.z_campuslogic_interface.p_transaction
+  * with the full path to this procedure, BANINST1.z_campuslogic_interface.p_sf_transaction
   */
-  PROCEDURE p_transaction (p_studentId                 VARCHAR2,
+  PROCEDURE p_sf_transaction (p_studentId                 VARCHAR2,
+                              p_eventNotificationId       INTEGER,
+                              p_eventId                   VARCHAR2 DEFAULT NULL,
+                              p_eventNotificationName     VARCHAR2 DEFAULT NULL,
+                              p_eventDateTime             VARCHAR2 DEFAULT NULL,
+                              p_sfAwardYear               VARCHAR2 DEFAULT NULL,
+                              p_sfTransactionCategoryId   INTEGER DEFAULT NULL,
+                              p_sfDocumentName            VARCHAR2 DEFAULT NULL)
+  AS
+      v_record_count                    NUMBER;
+      v_student_pidm                    NUMBER := NULL;
+      v_aidy_code                       VARCHAR2 (4) := NULL;
+
+      v_status                          VARCHAR2 (1);
+      v_treq_code                       rrrareq.rrrareq_treq_code%TYPE;
+      --update these constants to your Banner specific needs
+      v_banner_verify_code              rrrareq.rrrareq_treq_code%TYPE := 'CLOGIC';
+      v_banner_sap_code        CONSTANT rrrareq.rrrareq_treq_code%TYPE := 'SAP';
+      v_banner_pj_code         CONSTANT rrrareq.rrrareq_treq_code%TYPE := 'PROJUD';
+      v_banner_creation_code   CONSTANT rrrareq.rrrareq_treq_code%TYPE
+          := 'ACCTCL' ;
+  BEGIN
+      --Determine if StudentID matches a single record in Banner
+      BEGIN
+          SELECT spriden_pidm
+          INTO v_student_pidm
+          FROM spriden
+          WHERE spriden_change_ind IS NULL AND spriden_id = p_studentId;
+      EXCEPTION
+          WHEN NO_DATA_FOUND
+              THEN
+                  DBMS_OUTPUT.PUT_LINE (
+                              'ERROR: student not found for studentID ' || p_studentId);
+          WHEN TOO_MANY_ROWS
+              THEN
+                  DBMS_OUTPUT.PUT_LINE (
+                              'ERROR: duplicate pidm issue for studentID ' || p_studentId);
+      END;
+
+      --Determine if Aid Year exists in Banner
+      IF p_sfAwardYear IS NOT NULL
+      THEN
+          BEGIN
+              SELECT robinst_aidy_code
+              INTO v_aidy_code
+              FROM robinst
+              WHERE robinst_aidy_code = p_sfAwardYear;
+          EXCEPTION
+              WHEN NO_DATA_FOUND
+                  THEN
+                      v_aidy_code := NULL;
+                      DBMS_OUTPUT.PUT_LINE (
+                                  'ERROR: award year is invalid: ' || p_sfAwardYear);
+              WHEN TOO_MANY_ROWS
+                  THEN
+                      v_aidy_code := NULL;
+                      DBMS_OUTPUT.PUT_LINE (
+                                  'ERROR: award year is invalid: ' || p_sfAwardYear);
+          END;
+      END IF;
+
+      --log the incoming transaction
+      BEGIN
+          INSERT INTO baninst1.zclelog (zclelog_studentid,
+                                        zclelog_pidm,
+                                        zclelog_awardyear,
+                                        zclelog_eventid,
+                                        zclelog_eventnotificationname,
+                                        zclelog_eventdatetime,
+                                        zclelog_eventnotificationid,
+                                        zclelog_sftransactioncategoryid,
+                                        zclelog_sfdocumentname,
+                                        zclelog_sutermcode,
+                                        zclelog_suscholarshipawardid,
+                                        zclelog_suscholarshipname,
+                                        zclelog_suscholarshipcode,
+                                        zclelog_suamount,
+                                        zclelog_supostbatchuser,
+                                        zclelog_suposttype,
+                                        zclelog_sutermcomments,
+                                        zclelog_activity,
+                                        zclelog_create_date)
+          VALUES (p_studentId,
+                  v_student_pidm,
+                  v_aidy_code,
+                  p_eventId,
+                  p_eventNotificationName,
+                  p_eventDateTime,
+                  p_eventNotificationId,
+                  p_sfTransactionCategoryId,
+                  p_sfDocumentName,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  SYSDATE,
+                  SYSDATE);
+
+          COMMIT;
+      EXCEPTION
+          WHEN OTHERS
+              THEN
+                  DBMS_OUTPUT.PUT_LINE (
+                          'ERROR: failed to insert event notification into ZCLELOG');
+      END;
+
+      -- Custom Error Block
+      CASE
+          WHEN v_student_pidm IS NULL
+              THEN
+                  raise_application_error (
+                          -20404,
+                          'ERROR: student pidm not found for ' || p_studentId);
+          WHEN (p_sfAwardYear IS NULL)
+              THEN
+                  raise_application_error (
+                          -20400,
+                          'ERROR: aid year is required to process transaction');
+          END CASE;
+
+      --BANNER LOGIC
+
+      CASE
+          -- STUDENT FORMS
+          WHEN (p_eventNotificationId = 103)
+              THEN                                     --103 is File Review(see notes)
+              IF (NVL (p_sfTransactionCategoryId, 0) = 1)     --Student Verification
+              THEN
+                  p_tracking_upd_api (p_pidm        => v_student_pidm,
+                                      p_awardYear   => v_aidy_code,
+                                      p_treqCode    => v_banner_verify_code,
+                                      p_status      => 'Z',             --from RTVTRST
+                                      p_sysInd      => 'B');
+              END IF;
+          WHEN (p_eventNotificationId = 104)
+              THEN                                      --104 is Correction(see notes)
+              IF (NVL (p_sfTransactionCategoryId, 0) = 1)     --Student Verification
+              THEN
+                  p_tracking_upd_api (p_pidm        => v_student_pidm,
+                                      p_awardYear   => v_aidy_code,
+                                      p_treqCode    => v_banner_verify_code,
+                                      p_status      => 'Q',             --from RTVTRST
+                                      p_sysInd      => 'B');
+              END IF;
+          WHEN (p_eventNotificationId = 105 AND p_sfDocumentName IS NULL)
+              THEN                          --105 is Transaction Completed (see notes)
+              CASE
+                  WHEN NVL (p_sfTransactionCategoryId, 0) = 1   --Student Verification
+                      THEN                      --update Banner RRRAREQ verify requirement
+                          p_tracking_upd_api (p_pidm        => v_student_pidm,
+                                              p_awardYear   => v_aidy_code,
+                                              p_treqCode    => v_banner_verify_code,
+                                              p_status      => 'C',           --from RTVTRST
+                                              p_sysInd      => 'B');
+                          p_status_upd_api (p_pidm          => v_student_pidm,
+                                            p_awardYear     => v_aidy_code,
+                                            p_verPayInd     => 'V',
+                                            p_verComplete   => 'Y');
+                  WHEN NVL (p_sfTransactionCategoryId, 0) = 2             --SAP Appeal
+                      THEN                         --update Banner RRRAREQ SAP requirement
+                          p_tracking_upd_api (p_pidm        => v_student_pidm,
+                                              p_awardYear   => v_aidy_code,
+                                              p_treqCode    => v_banner_sap_code,
+                                              p_status      => 'C',           --from RTVTRST
+                                              p_sysInd      => 'B');
+                  WHEN NVL (p_sfTransactionCategoryId, 0) IN (3, 4) --PJ Dependency Override Appeal
+                      THEN                          --update Banner RRRAREQ PJ requirement
+                          p_tracking_upd_api (p_pidm        => v_student_pidm,
+                                              p_awardYear   => v_aidy_code,
+                                              p_treqCode    => v_banner_pj_code,
+                                              p_status      => 'C',           --from RTVTRST
+                                              p_sysInd      => 'B');
+                  END CASE;
+          WHEN (p_eventNotificationId IN (101, 107) AND p_sfDocumentName IS NULL)
+              THEN
+                  --101 is Transaction Collect (see notes)
+                  --107 is Transaction ReCollect (see notes)
+                  CASE
+                      WHEN NVL (p_sfTransactionCategoryId, 0) = 1   --Student Verification
+                          THEN                      --update Banner RRRAREQ verify requirement
+                              p_tracking_upd_api (p_pidm        => v_student_pidm,
+                                                  p_awardYear   => v_aidy_code,
+                                                  p_treqCode    => v_banner_verify_code,
+                                                  p_status      => 'N',           --from RTVTRST
+                                                  p_sysInd      => 'B');
+                      WHEN NVL (p_sfTransactionCategoryId, 0) = 2             --SAP Appeal
+                          THEN                         --update Banner RRRAREQ SAP requirement
+                              p_tracking_upd_api (p_pidm        => v_student_pidm,
+                                                  p_awardYear   => v_aidy_code,
+                                                  p_treqCode    => v_banner_sap_code,
+                                                  p_status      => 'N',           --from RTVTRST
+                                                  p_sysInd      => 'B');
+                      WHEN NVL (p_sfTransactionCategoryId, 0) IN (3, 4) --PJ Dependency Override Appeal
+                          THEN                          --update Banner RRRAREQ PJ requirement
+                              p_tracking_upd_api (p_pidm        => v_student_pidm,
+                                                  p_awardYear   => v_aidy_code,
+                                                  p_treqCode    => v_banner_pj_code,
+                                                  p_status      => 'N',           --from RTVTRST
+                                                  p_sysInd      => 'B');
+                      END CASE;
+          WHEN (p_eventNotificationId = 209)
+              THEN                                --209 is Account Created (see notes)
+              UPDATE ROBNYUD
+              SET ROBNYUD_ACTIVITY_DATE = SYSDATE,
+                  ROBNYUD_VALUE_3 = v_banner_creation_code
+              WHERE robnyud_pidm = v_student_pidm;
+          END CASE;
+
+      --EXTENDER LOGIC
+      IF (    NVL (p_sfTransactionCategoryId, 0) >= 1
+          AND p_eventNotificationId IS NOT NULL
+          AND v_student_pidm IS NOT NULL)
+      THEN
+          --determine the status for tracking (see notes)
+          IF NVL (p_eventNotificationId, 0) BETWEEN 400 AND 499
+          THEN
+              IF p_eventNotificationId = 403
+                  --Document Accepted (see notes)
+              THEN
+                  v_status := 'C';
+              ELSIF p_eventNotificationId = 401
+                  --Document Submitted (see notes)
+              THEN
+                  v_status := 'R';
+              ELSIF    p_eventNotificationId = 402
+                  OR p_eventNotificationId = 404
+                  OR p_eventNotificationId = 405
+                  --402 is Document Rejected (see notes)
+                  --404 is Document Recalled (see notes)
+                  --405 is Document Deleted (see notes)
+              THEN
+                  v_status := 'N';
+              END IF;
+
+              IF (p_sfDocumentName IS NOT NULL AND v_status IS NOT NULL)
+                  --update BDMS document tracking field
+              THEN
+                  --determine if there is a cross referenced document
+                  SELECT COUNT (*)
+                  INTO v_record_count
+                  FROM baninst1.zclxwlk
+                  WHERE     zclxwlk_aidy_code = v_aidy_code
+                    AND UPPER (zclxwlk_document) = UPPER (p_sfDocumentName)
+                    AND NVL (zclxwlk_treq_code, 'MINFO') <> 'MINFO';
+
+                  IF v_record_count = 1
+                      --get the tracking code if there is an associated tracking requirement
+                  THEN
+                      SELECT zclxwlk_treq_code
+                      INTO v_treq_code
+                      FROM baninst1.zclxwlk
+                      WHERE     zclxwlk_aidy_code = v_aidy_code
+                        AND UPPER (zclxwlk_document) = UPPER (p_sfDocumentName)
+                        AND NVL (zclxwlk_treq_code, 'MINFO') <> 'MINFO';
+                  ELSE
+                      v_treq_code := NULL;
+                  END IF;
+
+                  --update extender/banner tracking
+                  p_update_xtender (p_studentId             => p_studentId,
+                                    p_studentPidm           => v_student_pidm,
+                                    p_awardYear             => v_aidy_code,
+                                    p_documentName          => p_sfDocumentName,
+                                    p_treqCode              => v_treq_code,
+                                    p_status                => v_status,
+                                    p_eventNotificationId   => p_eventNotificationId);
+              END IF;
+          END IF;
+          --end extender logic
+      END IF;
+  END p_sf_transaction;
+
+  /**
+  * Procedure called from CL Connect for Scholarship Universe transactions
+  *
+  * In Web.config on the CL Connect server, populate the field dbCommandFieldValue
+  * with the full path to this procedure, BANINST1.z_campuslogic_interface.p_su_transaction
+  */
+  PROCEDURE p_su_transaction (p_studentId                 VARCHAR2,
                            p_eventNotificationId       INTEGER,
                            p_eventId                   VARCHAR2 DEFAULT NULL,
                            p_eventNotificationName     VARCHAR2 DEFAULT NULL,
                            p_eventDateTime             VARCHAR2 DEFAULT NULL,
-                           p_sfAwardYear               VARCHAR2 DEFAULT NULL,
-                           p_sfTransactionCategoryId   INTEGER DEFAULT NULL,
-                           p_sfDocumentName            VARCHAR2 DEFAULT NULL,
                            p_suTermName                VARCHAR2 DEFAULT NULL,
                            p_suScholarshipAwardId      VARCHAR2 DEFAULT NULL,
                            p_suScholarshipName         VARCHAR2 DEFAULT NULL,
@@ -285,19 +565,9 @@ AS
                            p_suPostType                VARCHAR2 DEFAULT NULL,
                            p_suTermComments            VARCHAR2 DEFAULT NULL)
   AS
-    v_record_count                    NUMBER;
     v_student_pidm                    NUMBER := NULL;
     v_aidy_code                       VARCHAR2 (4) := NULL;
     v_term                            VARCHAR2 (6);
-
-    v_status                          VARCHAR2 (1);
-    v_treq_code                       rrrareq.rrrareq_treq_code%TYPE;
-    --update these constants to your Banner specific needs
-    v_banner_verify_code              rrrareq.rrrareq_treq_code%TYPE := 'CLOGIC';
-    v_banner_sap_code        CONSTANT rrrareq.rrrareq_treq_code%TYPE := 'SAP';
-    v_banner_pj_code         CONSTANT rrrareq.rrrareq_treq_code%TYPE := 'PROJUD';
-    v_banner_creation_code   CONSTANT rrrareq.rrrareq_treq_code%TYPE
-                                        := 'ACCTCL' ;
   BEGIN
     --Determine if StudentID matches a single record in Banner
     BEGIN
@@ -315,29 +585,6 @@ AS
         DBMS_OUTPUT.PUT_LINE (
           'ERROR: duplicate pidm issue for studentID ' || p_studentId);
     END;
-
-    --Determine if Aid Year exists in Banner
-    IF p_sfAwardYear IS NOT NULL
-    THEN
-        BEGIN
-            SELECT robinst_aidy_code
-            INTO v_aidy_code
-            FROM robinst
-            WHERE robinst_aidy_code =
-                  COALESCE (p_sfAwardYear, p_suAwardYearName, '0000');
-        EXCEPTION
-            WHEN NO_DATA_FOUND
-                THEN
-                    v_aidy_code := NULL;
-                    DBMS_OUTPUT.PUT_LINE (
-                                'ERROR: award year is invalid: ' || p_sfAwardYear);
-            WHEN TOO_MANY_ROWS
-                THEN
-                    v_aidy_code := NULL;
-                    DBMS_OUTPUT.PUT_LINE (
-                                'ERROR: award year is invalid: ' || p_sfAwardYear);
-        END;
-    END IF;
 
     -- Determine if p_suTermName is valid and get aidy_code.
     IF p_suTermName IS NOT NULL
@@ -378,14 +625,14 @@ AS
                                     zclelog_activity,
                                     zclelog_create_date)
            VALUES (p_studentId,
-                   NULL,
+                   v_student_pidm,
                    v_aidy_code,
                    p_eventId,
                    p_eventNotificationName,
                    p_eventDateTime,
                    p_eventNotificationId,
-                   p_sfTransactionCategoryId,
-                   p_sfDocumentName,
+                   null,
+                   null,
                    p_suTermName,
                    p_suScholarshipAwardId,
                    p_suScholarshipName,
@@ -412,7 +659,7 @@ AS
         raise_application_error (
           -20404,
           'ERROR: student pidm not found for ' || p_studentId);
-      WHEN (p_sfAwardYear IS NULL AND p_suTermName IS NULL)
+      WHEN p_suTermName IS NULL
       THEN
         raise_application_error (
           -20400,
@@ -420,178 +667,25 @@ AS
     END CASE;
 
     --BANNER LOGIC
-
-    CASE
-      -- STUDENT FORMS
-      WHEN (p_eventNotificationId = 103)
-      THEN                                     --103 is File Review(see notes)
-        IF (NVL (p_sfTransactionCategoryId, 0) = 1)     --Student Verification
-        THEN
-          p_tracking_upd_api (p_pidm        => v_student_pidm,
-                              p_awardYear   => v_aidy_code,
-                              p_treqCode    => v_banner_verify_code,
-                              p_status      => 'Z',             --from RTVTRST
-                              p_sysInd      => 'B');
-        END IF;
-      WHEN (p_eventNotificationId = 104)
-      THEN                                      --104 is Correction(see notes)
-        IF (NVL (p_sfTransactionCategoryId, 0) = 1)     --Student Verification
-        THEN
-          p_tracking_upd_api (p_pidm        => v_student_pidm,
-                              p_awardYear   => v_aidy_code,
-                              p_treqCode    => v_banner_verify_code,
-                              p_status      => 'Q',             --from RTVTRST
-                              p_sysInd      => 'B');
-        END IF;
-      WHEN (p_eventNotificationId = 105 AND p_sfDocumentName IS NULL)
-      THEN                          --105 is Transaction Completed (see notes)
-        CASE
-          WHEN NVL (p_sfTransactionCategoryId, 0) = 1   --Student Verification
-          THEN                      --update Banner RRRAREQ verify requirement
-            p_tracking_upd_api (p_pidm        => v_student_pidm,
-                                p_awardYear   => v_aidy_code,
-                                p_treqCode    => v_banner_verify_code,
-                                p_status      => 'C',           --from RTVTRST
-                                p_sysInd      => 'B');
-            p_status_upd_api (p_pidm          => v_student_pidm,
-                              p_awardYear     => v_aidy_code,
-                              p_verPayInd     => 'V',
-                              p_verComplete   => 'Y');
-          WHEN NVL (p_sfTransactionCategoryId, 0) = 2             --SAP Appeal
-          THEN                         --update Banner RRRAREQ SAP requirement
-            p_tracking_upd_api (p_pidm        => v_student_pidm,
-                                p_awardYear   => v_aidy_code,
-                                p_treqCode    => v_banner_sap_code,
-                                p_status      => 'C',           --from RTVTRST
-                                p_sysInd      => 'B');
-          WHEN NVL (p_sfTransactionCategoryId, 0) IN (3, 4) --PJ Dependency Override Appeal
-          THEN                          --update Banner RRRAREQ PJ requirement
-            p_tracking_upd_api (p_pidm        => v_student_pidm,
-                                p_awardYear   => v_aidy_code,
-                                p_treqCode    => v_banner_pj_code,
-                                p_status      => 'C',           --from RTVTRST
-                                p_sysInd      => 'B');
-        END CASE;
-      WHEN (p_eventNotificationId IN (101, 107) AND p_sfDocumentName IS NULL)
+    IF (p_eventNotificationId = 701) and p_suPostType = 'Add'
       THEN
-        --101 is Transaction Collect (see notes)
-        --107 is Transaction ReCollect (see notes)
-        CASE
-          WHEN NVL (p_sfTransactionCategoryId, 0) = 1   --Student Verification
-          THEN                      --update Banner RRRAREQ verify requirement
-            p_tracking_upd_api (p_pidm        => v_student_pidm,
-                                p_awardYear   => v_aidy_code,
-                                p_treqCode    => v_banner_verify_code,
-                                p_status      => 'N',           --from RTVTRST
-                                p_sysInd      => 'B');
-          WHEN NVL (p_sfTransactionCategoryId, 0) = 2             --SAP Appeal
-          THEN                         --update Banner RRRAREQ SAP requirement
-            p_tracking_upd_api (p_pidm        => v_student_pidm,
-                                p_awardYear   => v_aidy_code,
-                                p_treqCode    => v_banner_sap_code,
-                                p_status      => 'N',           --from RTVTRST
-                                p_sysInd      => 'B');
-          WHEN NVL (p_sfTransactionCategoryId, 0) IN (3, 4) --PJ Dependency Override Appeal
-          THEN                          --update Banner RRRAREQ PJ requirement
-            p_tracking_upd_api (p_pidm        => v_student_pidm,
-                                p_awardYear   => v_aidy_code,
-                                p_treqCode    => v_banner_pj_code,
-                                p_status      => 'N',           --from RTVTRST
-                                p_sysInd      => 'B');
-        END CASE;
-      WHEN (p_eventNotificationId = 209)
-      THEN                                --209 is Account Created (see notes)
-        UPDATE ROBNYUD
-           SET ROBNYUD_ACTIVITY_DATE = SYSDATE,
-               ROBNYUD_VALUE_3 = v_banner_creation_code
-         WHERE robnyud_pidm = v_student_pidm;
-      WHEN (p_eventNotificationId = 701)
-      THEN
-        -- SCHOLARSHIP UNIVERSE
-        -- 701 is Scholarship Award Posted (see notes)
-        IF p_suPostType = 'Add'
-        THEN
-          -- If suPostType is Add call the award schedule create API from banner
-          rp_award_schedule.p_create (
-            p_aidy_code    => v_aidy_code,
-            p_pidm         => v_student_pidm,
-            p_fund_code    => p_suScholarshipCode,
-            p_term_code    => v_term,
-            p_offer_amt    => p_suAmount,
-            p_offer_date   =>
-              TO_DATE (
-                SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-                'MM/DD/YYYY HH24:MI:SS'),
-            p_accept_amt   => p_suAmount,
-            p_accept_date   =>
-              TO_DATE (
-                SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-                'MM/DD/YYYY HH24:MI:SS'));
-        END IF;
-    END CASE;
-
-    --EXTENDER LOGIC
-    IF (    NVL (p_sfTransactionCategoryId, 0) >= 1
-        AND p_eventNotificationId IS NOT NULL
-        AND v_student_pidm IS NOT NULL)
-    THEN
-      --determine the status for tracking (see notes)
-      IF NVL (p_eventNotificationId, 0) BETWEEN 400 AND 499
-      THEN
-        IF p_eventNotificationId = 403
-        --Document Accepted (see notes)
-        THEN
-          v_status := 'C';
-        ELSIF p_eventNotificationId = 401
-        --Document Submitted (see notes)
-        THEN
-          v_status := 'R';
-        ELSIF    p_eventNotificationId = 402
-              OR p_eventNotificationId = 404
-              OR p_eventNotificationId = 405
-        --402 is Document Rejected (see notes)
-        --404 is Document Recalled (see notes)
-        --405 is Document Deleted (see notes)
-        THEN
-          v_status := 'N';
-        END IF;
-
-        IF (p_sfDocumentName IS NOT NULL AND v_status IS NOT NULL)
-        --update BDMS document tracking field
-        THEN
-          --determine if there is a cross referenced document
-          SELECT COUNT (*)
-            INTO v_record_count
-            FROM baninst1.zclxwlk
-           WHERE     zclxwlk_aidy_code = v_aidy_code
-                 AND UPPER (zclxwlk_document) = UPPER (p_sfDocumentName)
-                 AND NVL (zclxwlk_treq_code, 'MINFO') <> 'MINFO';
-
-          IF v_record_count = 1
-          --get the tracking code if there is an associated tracking requirement
-          THEN
-            SELECT zclxwlk_treq_code
-              INTO v_treq_code
-              FROM baninst1.zclxwlk
-             WHERE     zclxwlk_aidy_code = v_aidy_code
-                   AND UPPER (zclxwlk_document) = UPPER (p_sfDocumentName)
-                   AND NVL (zclxwlk_treq_code, 'MINFO') <> 'MINFO';
-          ELSE
-            v_treq_code := NULL;
-          END IF;
-
-          --update extender/banner tracking
-          p_update_xtender (p_studentId             => p_studentId,
-                            p_studentPidm           => v_student_pidm,
-                            p_awardYear             => v_aidy_code,
-                            p_documentName          => p_sfDocumentName,
-                            p_treqCode              => v_treq_code,
-                            p_status                => v_status,
-                            p_eventNotificationId   => p_eventNotificationId);
-        END IF;
-      END IF;
-    --end extender logic
+        -- If suPostType is Add call the award schedule create API from banner
+        rp_award_schedule.p_create (
+          p_aidy_code    => v_aidy_code,
+          p_pidm         => v_student_pidm,
+          p_fund_code    => p_suScholarshipCode,
+          p_term_code    => v_term,
+          p_offer_amt    => p_suAmount,
+          p_offer_date   =>
+            TO_DATE (
+              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+              'MM/DD/YYYY HH24:MI:SS'),
+          p_accept_amt   => p_suAmount,
+          p_accept_date   =>
+            TO_DATE (
+              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+              'MM/DD/YYYY HH24:MI:SS'));
     END IF;
-  END p_transaction;
+  END p_su_transaction;
 END z_campuslogic_interface;
 /
