@@ -324,7 +324,7 @@ AS
             INTO v_aidy_code
             FROM robinst
             WHERE robinst_aidy_code =
-                  COALESCE (p_sfAwardYear, p_suAwardYearName, '0000');
+                  COALESCE (p_sfAwardYear, '0000');
         EXCEPTION
             WHEN NO_DATA_FOUND
                 THEN
@@ -378,7 +378,7 @@ AS
                                     zclelog_activity,
                                     zclelog_create_date)
            VALUES (p_studentId,
-                   NULL,
+                   v_student_pidm,
                    v_aidy_code,
                    p_eventId,
                    p_eventNotificationName,

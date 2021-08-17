@@ -15,7 +15,6 @@ AS
                            p_sfAwardYear               VARCHAR2 DEFAULT NULL,
                            p_sfTransactionCategoryId   INTEGER DEFAULT NULL,
                            p_sfDocumentName            VARCHAR2 DEFAULT NULL,
-                           p_suAwardYearName           VARCHAR2 DEFAULT NULL,
                            p_suTermName                VARCHAR2 DEFAULT NULL,
                            p_suScholarshipAwardId      VARCHAR2 DEFAULT NULL,
                            p_suScholarshipName         VARCHAR2 DEFAULT NULL,
