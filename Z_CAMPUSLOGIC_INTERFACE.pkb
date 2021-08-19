@@ -571,10 +571,12 @@ AS
     v_student_pidm                   NUMBER := NULL;
     v_aidy_code                      VARCHAR2 (4) := NULL;
     v_term                           VARCHAR2 (6);
+    v_exists                         BOOLEAN;
 
     --update these constants to your Banner specific needs
+    v_awst_code_pending     CONSTANT VARCHAR2 (4) := 'P';
     v_awst_code_offered     CONSTANT VARCHAR2 (4) := 'O';        --703 offered
-    v_awst_code_accepted    CONSTANT VARCHAR2 (4) := 'A';         --701 posted
+    v_awst_code_accepted    CONSTANT VARCHAR2 (4) := 'A';        --701 posted
     v_awst_code_cancelled   CONSTANT VARCHAR2 (4) := 'C';        --706 removed
   BEGIN
     --Determine if StudentID matches a single record in Banner
@@ -673,22 +675,48 @@ AS
         'ERROR: aid year or term name is required to process transaction');
     END IF;
 
+    v_exists := rp_award_schedule.f_exists(
+        p_aidy_code => v_aidy_code,
+        p_pidm => v_student_pidm,
+        p_fund_code =>  p_suScholarshipCode,
+        p_term_code => v_term);
+
+    IF NOT v_exists
+    THEN
+      rp_award_schedule.p_create (
+              p_aidy_code   => v_aidy_code,
+              p_pidm        => v_student_pidm,
+              p_fund_code   => p_suScholarshipCode,
+              p_term_code   => v_term,
+              p_offer_amt   => p_suAmount,
+              p_offer_date   =>
+                  TO_DATE (
+                          SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+                          'MM/DD/YYYY HH24:MI:SS'),
+              p_awst_code   => v_awst_code_pending,
+              p_awst_date   =>
+                  TO_DATE (
+                          SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+                          'MM/DD/YYYY HH24:MI:SS'));
+    END IF;
+
     --BANNER LOGIC
     CASE
-      WHEN (p_eventNotificationId = 703) AND p_suPostType = 'Add'
+      WHEN (p_eventNotificationId = 703)
       --703 offered 'O'
       THEN
-        -- If suPostType is Add call the award schedule create API from banner
-        rp_award_schedule.p_create (
-          p_aidy_code   => v_aidy_code,
-          p_pidm        => v_student_pidm,
-          p_fund_code   => p_suScholarshipCode,
-          p_term_code   => v_term,
-          p_offer_amt   => p_suAmount,
-          p_offer_date   =>
-            TO_DATE (
-              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-              'MM/DD/YYYY HH24:MI:SS'));
+          rp_award_schedule.p_update (
+                  p_aidy_code   => v_aidy_code,
+                  p_pidm        => v_student_pidm,
+                  p_fund_code   => p_suScholarshipCode,
+                  p_period      => v_term,
+                  p_term_code   => v_term,
+                  p_offer_amt   => p_suAmount,
+                  p_awst_code   => v_awst_code_offered,
+                  p_awst_date   =>
+                      TO_DATE (
+                              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+                              'MM/DD/YYYY HH24:MI:SS'));
       WHEN (p_eventNotificationId = 701) AND p_suPostType = 'Add'
       --701 posted 'A'
       THEN
@@ -698,6 +726,7 @@ AS
           p_fund_code    => p_suScholarshipCode,
           p_period       => v_term,
           p_term_code    => v_term,
+          p_offer_amt   => p_suAmount,
           p_accept_amt   => p_suAmount,
           p_accept_date   =>
             TO_DATE (
@@ -708,7 +737,7 @@ AS
             TO_DATE (
               SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
               'MM/DD/YYYY HH24:MI:SS'));
-      WHEN (p_eventNotificationId = 706) AND p_suPostType = 'Add'
+      WHEN (p_eventNotificationId = 706)
       --706 removed 'C'
       THEN
         rp_award_schedule.p_update (
