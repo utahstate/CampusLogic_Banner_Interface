@@ -580,6 +580,7 @@ AS
     v_awst_code_offered     CONSTANT VARCHAR2 (4) := 'O';        --703 offered
     v_awst_code_accepted    CONSTANT VARCHAR2 (4) := 'A';        --701 posted
     v_awst_code_cancelled   CONSTANT VARCHAR2 (4) := 'C';        --706 removed
+    v_awst_code_declined    CONSTANT VARCHAR2 (4) := 'D';        --705 declined
   BEGIN
     --Determine if StudentID matches a single record in Banner
     BEGIN
@@ -692,7 +693,7 @@ AS
               p_period      => v_term,
               p_term_code   => v_term,
               p_offer_amt   => p_suAmount,
-              p_offer_date   =>
+              p_offer_date  =>
                   TO_DATE (
                           SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
                           'MM/DD/YYYY HH24:MI:SS'),
@@ -729,14 +730,30 @@ AS
           p_fund_code    => p_suScholarshipCode,
           p_period       => v_term,
           p_term_code    => v_term,
-          p_offer_amt   => p_suAmount,
+          p_offer_amt    => p_suAmount,
           p_accept_amt   => p_suAmount,
-          p_accept_date   =>
+          p_accept_date  =>
             TO_DATE (
               SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
               'MM/DD/YYYY HH24:MI:SS'),
           p_awst_code    => v_awst_code_accepted,
           p_awst_date    =>
+            TO_DATE (
+              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+              'MM/DD/YYYY HH24:MI:SS'));
+      WHEN (p_eventNotificationId = 705)
+      --705 declined 'D'
+      THEN
+        rp_award_schedule.p_update (
+          p_aidy_code   => v_aidy_code,
+          p_pidm        => v_student_pidm,
+          p_fund_code   => p_suScholarshipCode,
+          p_period      => v_term,
+          p_term_code   => v_term,
+          p_offer_amt   => 0,
+          p_accept_amt  => 0,
+          p_awst_code   => v_awst_code_declined,
+          p_awst_date   =>
             TO_DATE (
               SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
               'MM/DD/YYYY HH24:MI:SS'));
@@ -749,6 +766,8 @@ AS
           p_fund_code   => p_suScholarshipCode,
           p_period      => v_term,
           p_term_code   => v_term,
+          p_offer_amt   => 0,
+          p_accept_amt  => 0,
           p_awst_code   => v_awst_code_cancelled,
           p_awst_date   =>
             TO_DATE (
