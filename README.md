@@ -16,8 +16,11 @@ Multiple schools have contributed to this integration effort:
 This integration consists of an intermediary server that sits within the local network. This server runs software provided by CampusLogic called CLConnect to commuinicate with the CampusLogic hosts and provide the web services required by the integration. Those web services call a custom built Oracle pacakage that resides within the local Banner Database. Due to the extensive use of APIs, the integration is near real time as the CLCONNECT servers make calls.
 
 Banner Custom Package:
+``` SQL
   BANINST1.z_campuslogic_interface
+```
 Primary procedures called from CLCONNECT:
+``` SQL
   PROCEDURE p_sf_transaction (
     p_studentId                 VARCHAR2,
     p_eventNotificationId       INTEGER,
@@ -42,6 +45,7 @@ Primary procedures called from CLCONNECT:
     p_suPostBatchUser         VARCHAR2 DEFAULT NULL,
     p_suPostType              VARCHAR2 DEFAULT NULL,
     p_suTermComments          VARCHAR2 DEFAULT NULL);
+```
 
 The custom Oracle Package was created in collaboration with multiple schools to be shared with other schools facing a similar integration. As such, the package code is heavily documented including specification references at CampusLogic.
 
