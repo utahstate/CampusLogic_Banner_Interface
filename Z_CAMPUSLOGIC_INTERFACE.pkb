@@ -38,6 +38,8 @@ AS
     2.0.1    20210809  Carl & Miles, USU    logic changes for cl-connect limitations
     2.0.2                                   removal of USU specific block
     2.0.3    20210818  Miles Canfield, USU  split p_transaction into SF and SU parts
+    2.0.4    20210825  Miles Canfield, USU  put rp_award create outside case statement
+                                              isolated SU event updates as a result
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -571,7 +573,7 @@ AS
     v_student_pidm                   NUMBER := NULL;
     v_aidy_code                      VARCHAR2 (4) := NULL;
     v_term                           VARCHAR2 (6);
-    v_exists                         BOOLEAN;
+    v_exists                         VARCHAR2 (1) := 'N';
 
     --update these constants to your Banner specific needs
     v_awst_code_pending     CONSTANT VARCHAR2 (4) := 'P';
@@ -681,12 +683,13 @@ AS
         p_fund_code =>  p_suScholarshipCode,
         p_term_code => v_term);
 
-    IF NOT v_exists
+    IF (v_exists = 'N')
     THEN
       rp_award_schedule.p_create (
               p_aidy_code   => v_aidy_code,
               p_pidm        => v_student_pidm,
               p_fund_code   => p_suScholarshipCode,
+              p_period      => v_term,
               p_term_code   => v_term,
               p_offer_amt   => p_suAmount,
               p_offer_date   =>
