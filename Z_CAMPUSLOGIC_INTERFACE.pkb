@@ -1,4 +1,4 @@
-/* Formatted on 8/9/2021 1:51:08 PM (QP5 v5.336) */
+/* Formatted on 8/18/2021 3:55:27 PM (QP5 v5.336) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -37,6 +37,9 @@ AS
     2.0      20210802  Miles Canfield, USU  expansion to accomadate Scholarship Universe
     2.0.1    20210809  Carl & Miles, USU    logic changes for cl-connect limitations
     2.0.2                                   removal of USU specific block
+    2.0.3    20210818  Miles Canfield, USU  split p_transaction into SF and SU parts
+    2.0.4    20210825  Miles Canfield, USU  put rp_award create outside case statement
+                                              isolated SU event updates as a result
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -262,38 +265,26 @@ AS
     END IF;
   END p_update_xtender;
 
+
   /**
-  * Proceudre called from CL Connect
+  * Procedure called from CL Connect for Student Forms transactions
   *
   * In Web.config on the CL Connect server, populate the field dbCommandFieldValue
-  * with the full path to this procedure, BANINST1.z_campuslogic_interface.p_transaction
+  * with the full path to this procedure, BANINST1.z_campuslogic_interface.p_sf_transaction
   */
-  PROCEDURE p_transaction (p_studentId                 VARCHAR2,
-                           p_eventNotificationId       INTEGER,
-                           p_eventId                   VARCHAR2 DEFAULT NULL,
-                           p_eventNotificationName     VARCHAR2 DEFAULT NULL,
-                           p_eventDateTime             VARCHAR2 DEFAULT NULL,
-                           p_sfAwardYear               VARCHAR2 DEFAULT NULL,
-                           p_sfTransactionCategoryId   INTEGER DEFAULT NULL,
-                           p_sfDocumentName            VARCHAR2 DEFAULT NULL,
-                           p_suAwardYearName           VARCHAR2 DEFAULT NULL,
-                           p_suTermName                VARCHAR2 DEFAULT NULL,
-                           p_suScholarshipAwardId      VARCHAR2 DEFAULT NULL,
-                           p_suScholarshipName         VARCHAR2 DEFAULT NULL,
-                           p_suScholarshipCode         VARCHAR2 DEFAULT NULL,
-                           p_suAmount                  NUMBER DEFAULT NULL,
-                           p_suPostBatchUser           VARCHAR2 DEFAULT NULL,
-                           p_suPostType                VARCHAR2 DEFAULT NULL,
-                           p_suTermComments            VARCHAR2 DEFAULT NULL)
+  PROCEDURE p_sf_transaction (
+    p_studentId                 VARCHAR2,
+    p_eventNotificationId       INTEGER,
+    p_eventId                   VARCHAR2 DEFAULT NULL,
+    p_eventNotificationName     VARCHAR2 DEFAULT NULL,
+    p_eventDateTime             VARCHAR2 DEFAULT NULL,
+    p_sfAwardYear               VARCHAR2 DEFAULT NULL,
+    p_sfTransactionCategoryId   INTEGER DEFAULT NULL,
+    p_sfDocumentName            VARCHAR2 DEFAULT NULL)
   AS
     v_record_count                    NUMBER;
     v_student_pidm                    NUMBER := NULL;
     v_aidy_code                       VARCHAR2 (4) := NULL;
-    v_fa_proc_yr                      VARCHAR2 (4) := NULL;
-    v_elog_rowid                      ROWID;
-    v_term                            VARCHAR2 (6);
-    v_errm                            VARCHAR2 (4000);
-    v_sqlc                            VARCHAR2 (4000);
 
     v_status                          VARCHAR2 (1);
     v_treq_code                       rrrareq.rrrareq_treq_code%TYPE;
@@ -322,26 +313,26 @@ AS
     END;
 
     --Determine if Aid Year exists in Banner
-    BEGIN
-      SELECT robinst_aidy_code
-        INTO v_aidy_code
-        FROM robinst
-       WHERE robinst_aidy_code =
-             COALESCE (p_sfAwardYear, p_suAwardYearName, '0000');
-    EXCEPTION
-      WHEN NO_DATA_FOUND
-      THEN
-        v_aidy_code := NULL;
-        DBMS_OUTPUT.PUT_LINE (
-             'ERROR: award year is invalid: '
-          || COALESCE (p_sfAwardYear, p_suAwardYearName, NULL));
-      WHEN TOO_MANY_ROWS
-      THEN
-        v_aidy_code := NULL;
-        DBMS_OUTPUT.PUT_LINE (
-             'ERROR: award year is invalid: '
-          || COALESCE (p_sfAwardYear, p_suAwardYearName, NULL));
-    END;
+    IF p_sfAwardYear IS NOT NULL
+    THEN
+      BEGIN
+        SELECT robinst_aidy_code
+          INTO v_aidy_code
+          FROM robinst
+         WHERE robinst_aidy_code = p_sfAwardYear;
+      EXCEPTION
+        WHEN NO_DATA_FOUND
+        THEN
+          v_aidy_code := NULL;
+          DBMS_OUTPUT.PUT_LINE (
+            'ERROR: award year is invalid: ' || p_sfAwardYear);
+        WHEN TOO_MANY_ROWS
+        THEN
+          v_aidy_code := NULL;
+          DBMS_OUTPUT.PUT_LINE (
+            'ERROR: award year is invalid: ' || p_sfAwardYear);
+      END;
+    END IF;
 
     --log the incoming transaction
     BEGIN
@@ -365,22 +356,22 @@ AS
                                     zclelog_activity,
                                     zclelog_create_date)
            VALUES (p_studentId,
-                   NULL,
-                   COALESCE (p_sfAwardYear, p_suAwardYearName, NULL),
+                   v_student_pidm,
+                   v_aidy_code,
                    p_eventId,
                    p_eventNotificationName,
                    p_eventDateTime,
                    p_eventNotificationId,
                    p_sfTransactionCategoryId,
                    p_sfDocumentName,
-                   p_suTermName,
-                   p_suScholarshipAwardId,
-                   p_suScholarshipName,
-                   p_suScholarshipCode,
-                   p_suAmount,
-                   p_suPostBatchUser,
-                   p_suPostType,
-                   p_suTermComments,
+                   NULL,
+                   NULL,
+                   NULL,
+                   NULL,
+                   NULL,
+                   NULL,
+                   NULL,
+                   NULL,
                    SYSDATE,
                    SYSDATE);
 
@@ -392,39 +383,18 @@ AS
           'ERROR: failed to insert event notification into ZCLELOG');
     END;
 
-    -- Determine if p_suTermName is valid.
-    IF p_suTermName != NULL
-    THEN
-      BEGIN
-        SELECT stvterm_code, stvterm_fa_proc_yr
-          INTO v_term, v_fa_proc_yr
-          FROM stvterm
-         WHERE UPPER (stvterm_desc) = UPPER (p_suTermName);
-      EXCEPTION
-        WHEN NO_DATA_FOUND
-        THEN
-          DBMS_OUTPUT.PUT_LINE (
-            'ERROR: term desc is invalid: ' || p_suTermName);
-      END;
-    END IF;
-
     -- Custom Error Block
-    CASE
-      WHEN v_student_pidm IS NULL
-      THEN
-        raise_application_error (
-          -20404,
-          'ERROR: student pidm not found for ' || p_studentId);
-      WHEN (p_sfAwardYear IS NULL AND p_suAwardYearName IS NULL)
-      THEN
-        raise_application_error (
-          -20400,
-          'ERROR: aid year or aid year name is required to process transaction');
-      WHEN (v_fa_proc_yr IS NOT NULL AND v_aidy_code <> v_fa_proc_yr)
-      THEN
-        raise_application_error (-20400,
-                                 'ERROR: term code and aid year mismatch');
-    END CASE;
+    IF v_student_pidm IS NULL
+    THEN
+      raise_application_error (
+        -20404,
+        'ERROR: student pidm not found for ' || p_studentId);
+    ELSIF p_sfAwardYear IS NULL
+    THEN
+      raise_application_error (
+        -20400,
+        'ERROR: award year is required to process transaction');
+    END IF;
 
     --BANNER LOGIC
 
@@ -512,29 +482,6 @@ AS
            SET ROBNYUD_ACTIVITY_DATE = SYSDATE,
                ROBNYUD_VALUE_3 = v_banner_creation_code
          WHERE robnyud_pidm = v_student_pidm;
-      WHEN (p_eventNotificationId = 701)
-      THEN
-        -- SCHOLARSHIP UNIVERSE
-        -- 701 is Scholarship Award Posted (see notes)
-        IF p_suPostType = 'Add'
-        THEN
-          -- If suPostType is Add call the award schedule create API from banner
-          rp_award_schedule.p_create (
-            p_aidy_code    => v_aidy_code,
-            p_pidm         => v_student_pidm,
-            p_fund_code    => p_suScholarshipCode,
-            p_term_code    => v_term,
-            p_offer_amt    => p_suAmount,
-            p_offer_date   =>
-              TO_DATE (
-                SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-                'MM/DD/YYYY HH24:MI:SS'),
-            p_accept_amt   => p_suAmount,
-            p_accept_date   =>
-              TO_DATE (
-                SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-                'MM/DD/YYYY HH24:MI:SS'));
-        END IF;
     END CASE;
 
     --EXTENDER LOGIC
@@ -599,6 +546,233 @@ AS
       END IF;
     --end extender logic
     END IF;
-  END p_transaction;
+  END p_sf_transaction;
+
+  /**
+  * Procedure called from CL Connect for Scholarship Universe transactions
+  *
+  * In Web.config on the CL Connect server, populate the field dbCommandFieldValue
+  * with the full path to this procedure, BANINST1.z_campuslogic_interface.p_su_transaction
+  */
+  PROCEDURE p_su_transaction (
+    p_studentId               VARCHAR2,
+    p_eventNotificationId     INTEGER,
+    p_eventId                 VARCHAR2 DEFAULT NULL,
+    p_eventNotificationName   VARCHAR2 DEFAULT NULL,
+    p_eventDateTime           VARCHAR2 DEFAULT NULL,
+    p_suTermName              VARCHAR2 DEFAULT NULL,
+    p_suScholarshipAwardId    VARCHAR2 DEFAULT NULL,
+    p_suScholarshipName       VARCHAR2 DEFAULT NULL,
+    p_suScholarshipCode       VARCHAR2 DEFAULT NULL,
+    p_suAmount                NUMBER DEFAULT NULL,
+    p_suPostBatchUser         VARCHAR2 DEFAULT NULL,
+    p_suPostType              VARCHAR2 DEFAULT NULL,
+    p_suTermComments          VARCHAR2 DEFAULT NULL)
+  AS
+    v_student_pidm                   NUMBER := NULL;
+    v_aidy_code                      VARCHAR2 (4) := NULL;
+    v_term                           VARCHAR2 (6);
+    v_exists                         VARCHAR2 (1) := 'N';
+
+    --update these constants to your Banner specific needs
+    v_awst_code_pending     CONSTANT VARCHAR2 (4) := 'P';
+    v_awst_code_offered     CONSTANT VARCHAR2 (4) := 'O';        --703 offered
+    v_awst_code_accepted    CONSTANT VARCHAR2 (4) := 'A';        --701 posted
+    v_awst_code_cancelled   CONSTANT VARCHAR2 (4) := 'C';        --706 removed
+    v_awst_code_declined    CONSTANT VARCHAR2 (4) := 'D';        --705 declined
+  BEGIN
+    --Determine if StudentID matches a single record in Banner
+    BEGIN
+      SELECT spriden_pidm
+        INTO v_student_pidm
+        FROM spriden
+       WHERE spriden_change_ind IS NULL AND spriden_id = p_studentId;
+    EXCEPTION
+      WHEN NO_DATA_FOUND
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+          'ERROR: student not found for studentID ' || p_studentId);
+      WHEN TOO_MANY_ROWS
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+          'ERROR: duplicate pidm issue for studentID ' || p_studentId);
+    END;
+
+    -- Determine if p_suTermName is valid and get aidy_code.
+    IF p_suTermName IS NOT NULL
+    THEN
+      BEGIN
+        SELECT stvterm_code, stvterm_fa_proc_yr
+          INTO v_term, v_aidy_code
+          FROM stvterm
+         WHERE UPPER (stvterm_desc) = UPPER (p_suTermName);
+      EXCEPTION
+        WHEN NO_DATA_FOUND
+        THEN
+          v_aidy_code := NULL;
+          DBMS_OUTPUT.PUT_LINE (
+            'ERROR: term desc is invalid: ' || p_suTermName);
+      END;
+    END IF;
+
+    --log the incoming transaction
+    BEGIN
+      INSERT INTO baninst1.zclelog (zclelog_studentid,
+                                    zclelog_pidm,
+                                    zclelog_awardyear,
+                                    zclelog_eventid,
+                                    zclelog_eventnotificationname,
+                                    zclelog_eventdatetime,
+                                    zclelog_eventnotificationid,
+                                    zclelog_sftransactioncategoryid,
+                                    zclelog_sfdocumentname,
+                                    zclelog_sutermcode,
+                                    zclelog_suscholarshipawardid,
+                                    zclelog_suscholarshipname,
+                                    zclelog_suscholarshipcode,
+                                    zclelog_suamount,
+                                    zclelog_supostbatchuser,
+                                    zclelog_suposttype,
+                                    zclelog_sutermcomments,
+                                    zclelog_activity,
+                                    zclelog_create_date)
+           VALUES (p_studentId,
+                   v_student_pidm,
+                   v_aidy_code,
+                   p_eventId,
+                   p_eventNotificationName,
+                   p_eventDateTime,
+                   p_eventNotificationId,
+                   NULL,
+                   NULL,
+                   v_term,
+                   p_suScholarshipAwardId,
+                   p_suScholarshipName,
+                   p_suScholarshipCode,
+                   p_suAmount,
+                   p_suPostBatchUser,
+                   p_suPostType,
+                   p_suTermComments,
+                   SYSDATE,
+                   SYSDATE);
+
+      COMMIT;
+    EXCEPTION
+      WHEN OTHERS
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+          'ERROR: failed to insert event notification into ZCLELOG');
+    END;
+
+    -- Custom Error Block
+    IF v_student_pidm IS NULL
+    THEN
+      raise_application_error (
+        -20404,
+        'ERROR: student pidm not found for ' || p_studentId);
+    ELSIF p_suTermName IS NULL
+    THEN
+      raise_application_error (
+        -20400,
+        'ERROR: aid year or term name is required to process transaction');
+    END IF;
+
+    v_exists := rp_award_schedule.f_exists(
+        p_aidy_code => v_aidy_code,
+        p_pidm => v_student_pidm,
+        p_fund_code =>  p_suScholarshipCode,
+        p_term_code => v_term);
+
+    IF (v_exists = 'N')
+    THEN
+      rp_award_schedule.p_create (
+              p_aidy_code   => v_aidy_code,
+              p_pidm        => v_student_pidm,
+              p_fund_code   => p_suScholarshipCode,
+              p_period      => v_term,
+              p_term_code   => v_term,
+              p_offer_amt   => p_suAmount,
+              p_offer_date  =>
+                  TO_DATE (
+                          SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+                          'MM/DD/YYYY HH24:MI:SS'),
+              p_awst_code   => v_awst_code_pending,
+              p_awst_date   =>
+                  TO_DATE (
+                          SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+                          'MM/DD/YYYY HH24:MI:SS'));
+    END IF;
+
+    --BANNER LOGIC
+    CASE
+      WHEN (p_eventNotificationId = 703)
+      --703 offered 'O'
+      THEN
+          rp_award_schedule.p_update (
+                  p_aidy_code   => v_aidy_code,
+                  p_pidm        => v_student_pidm,
+                  p_fund_code   => p_suScholarshipCode,
+                  p_period      => v_term,
+                  p_term_code   => v_term,
+                  p_offer_amt   => p_suAmount,
+                  p_awst_code   => v_awst_code_offered,
+                  p_awst_date   =>
+                      TO_DATE (
+                              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+                              'MM/DD/YYYY HH24:MI:SS'));
+      WHEN (p_eventNotificationId = 701) AND p_suPostType = 'Add'
+      --701 posted 'A'
+      THEN
+        rp_award_schedule.p_update (
+          p_aidy_code    => v_aidy_code,
+          p_pidm         => v_student_pidm,
+          p_fund_code    => p_suScholarshipCode,
+          p_period       => v_term,
+          p_term_code    => v_term,
+          p_offer_amt    => p_suAmount,
+          p_accept_amt   => p_suAmount,
+          p_accept_date  =>
+            TO_DATE (
+              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+              'MM/DD/YYYY HH24:MI:SS'),
+          p_awst_code    => v_awst_code_accepted,
+          p_awst_date    =>
+            TO_DATE (
+              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+              'MM/DD/YYYY HH24:MI:SS'));
+      WHEN (p_eventNotificationId = 705)
+      --705 declined 'D'
+      THEN
+        rp_award_schedule.p_update (
+          p_aidy_code   => v_aidy_code,
+          p_pidm        => v_student_pidm,
+          p_fund_code   => p_suScholarshipCode,
+          p_period      => v_term,
+          p_term_code   => v_term,
+          p_offer_amt   => 0,
+          p_accept_amt  => 0,
+          p_awst_code   => v_awst_code_declined,
+          p_awst_date   =>
+            TO_DATE (
+              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+              'MM/DD/YYYY HH24:MI:SS'));
+      WHEN (p_eventNotificationId = 706)
+      --706 removed 'C'
+      THEN
+        rp_award_schedule.p_update (
+          p_aidy_code   => v_aidy_code,
+          p_pidm        => v_student_pidm,
+          p_fund_code   => p_suScholarshipCode,
+          p_period      => v_term,
+          p_term_code   => v_term,
+          p_offer_amt   => 0,
+          p_accept_amt  => 0,
+          p_awst_code   => v_awst_code_cancelled,
+          p_awst_date   =>
+            TO_DATE (
+              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+              'MM/DD/YYYY HH24:MI:SS'));
+    END CASE;
+  END p_su_transaction;
 END z_campuslogic_interface;
 /
