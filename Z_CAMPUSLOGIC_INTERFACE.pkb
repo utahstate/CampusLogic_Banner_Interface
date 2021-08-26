@@ -482,6 +482,8 @@ AS
            SET ROBNYUD_ACTIVITY_DATE = SYSDATE,
                ROBNYUD_VALUE_3 = v_banner_creation_code
          WHERE robnyud_pidm = v_student_pidm;
+      ELSE
+        NULL;
     END CASE;
 
     --EXTENDER LOGIC
