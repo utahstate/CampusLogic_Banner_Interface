@@ -1,6 +1,6 @@
 # CampusLogic Banner Interface
 
-This implemention consistens of two CampusLogic applciations; Student Forms which is utilized to provide online verification document gathering to students working on FAFSA applications, and Scholarship Universe which is utilized to streamline and unify internal and external scholarship efforts.
+This implemention consists of two CampusLogic applications; Student Forms which is utilized to provide online verification document gathering to students working on FAFSA applications, and Scholarship Universe which is utilized to streamline and unify internal and external scholarship efforts.
 
 Originally implemented in 2016 as a standalone for Student Forms (simply called CampusLogic then), this solution was expanded to incorporate the additional integration needed to support Scholarship Universe in 2021.
 
