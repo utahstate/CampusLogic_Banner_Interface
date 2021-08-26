@@ -384,18 +384,17 @@ AS
     END;
 
     -- Custom Error Block
-    CASE
-      WHEN v_student_pidm IS NULL
-      THEN
-        raise_application_error (
-          -20404,
-          'ERROR: student pidm not found for ' || p_studentId);
-      WHEN (p_sfAwardYear IS NULL)
-      THEN
-        raise_application_error (
-          -20400,
-          'ERROR: aid year is required to process transaction');
-    END CASE;
+    IF v_student_pidm IS NULL
+    THEN
+      raise_application_error (
+        -20404,
+        'ERROR: student pidm not found for ' || p_studentId);
+    ELSIF p_sfAwardYear IS NULL
+    THEN
+      raise_application_error (
+        -20400,
+        'ERROR: award year is required to process transaction');
+    END IF;
 
     --BANNER LOGIC
 
