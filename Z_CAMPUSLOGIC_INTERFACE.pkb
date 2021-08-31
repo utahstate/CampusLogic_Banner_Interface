@@ -1,4 +1,4 @@
-/* Formatted on 8/18/2021 3:55:27 PM (QP5 v5.336) */
+/* Formatted on 8/31/2021 1:18:49 PM (QP5 v5.371) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -298,6 +298,8 @@ AS
     v_record_count                    NUMBER;
     v_student_pidm                    NUMBER := NULL;
     v_aidy_code                       VARCHAR2 (4) := NULL;
+    v_error_code                      NUMBER := NULL;
+    v_error_message                   VARCHAR2 (512) := NULL;
 
     v_status                          VARCHAR2 (1);
     v_treq_code                       rrrareq.rrrareq_treq_code%TYPE;
@@ -570,19 +572,25 @@ AS
     END IF;
 
     UPDATE baninst1.zclelog
-    SET zclelog_processed = SYSDATE;
+       SET zclelog_processed = SYSDATE;
+
     COMMIT;
-
   EXCEPTION
-      WHEN OTHERS THEN
+    WHEN OTHERS
+    THEN
+      v_error_code := SQLCODE;
+      v_error_message := TRUNC (SQLERRM, 511);
 
-          v_error_code := SQLCODE;
-          v_error_message := trunc(SQLERRM, 511);
+      INSERT INTO baninst1.zclerrm (zclerrm_eventid,
+                                    zclerrm_code,
+                                    zclerrm_message,
+                                    zclerrm_create_date)
+           VALUES (p_eventId,
+                   v_error_code,
+                   v_error_message,
+                   SYSDATE);
 
-          INSERT INTO baninst1.zclerrm (zclerrm_eventid, zclerrm_code, zclerrm_message, zclerrm_create_date)
-          VALUES(p_eventId, v_error_code, v_error_message, SYSDATE);
-          COMMIT;
-
+      COMMIT;
   END p_sf_transaction;
 
   /**
@@ -724,30 +732,28 @@ AS
         'ERROR: aid year or term name is required to process transaction');
     END IF;
 
-    v_exists := rp_award_schedule.f_exists(
-        p_aidy_code => v_aidy_code,
-        p_pidm => v_student_pidm,
-        p_fund_code =>  p_suScholarshipCode,
-        p_term_code => v_term);
+    v_exists :=
+      rp_award_schedule.f_exists (p_aidy_code   => v_aidy_code,
+                                  p_pidm        => v_student_pidm,
+                                  p_fund_code   => p_suScholarshipCode,
+                                  p_term_code   => v_term);
 
     IF (v_exists = 'N')
     THEN
       rp_award_schedule.p_create (
-              p_aidy_code   => v_aidy_code,
-              p_pidm        => v_student_pidm,
-              p_fund_code   => p_suScholarshipCode,
-              p_period      => v_term,
-              p_term_code   => v_term,
-              p_offer_amt   => p_suAmount,
-              p_offer_date  =>
-                  TO_DATE (
-                          SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-                          'MM/DD/YYYY HH24:MI:SS'),
-              p_awst_code   => v_awst_code_pending,
-              p_awst_date   =>
-                  TO_DATE (
-                          SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-                          'MM/DD/YYYY HH24:MI:SS'));
+        p_aidy_code   => v_aidy_code,
+        p_pidm        => v_student_pidm,
+        p_fund_code   => p_suScholarshipCode,
+        p_period      => v_term,
+        p_term_code   => v_term,
+        p_offer_amt   => p_suAmount,
+        p_offer_date   =>
+          TO_DATE (SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+                   'MM/DD/YYYY HH24:MI:SS'),
+        p_awst_code   => v_awst_code_pending,
+        p_awst_date   =>
+          TO_DATE (SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+                   'MM/DD/YYYY HH24:MI:SS'));
     END IF;
 
     --BANNER LOGIC
@@ -755,18 +761,18 @@ AS
       WHEN (p_eventNotificationId = 703)
       --703 offered 'O'
       THEN
-          rp_award_schedule.p_update (
-                  p_aidy_code   => v_aidy_code,
-                  p_pidm        => v_student_pidm,
-                  p_fund_code   => p_suScholarshipCode,
-                  p_period      => v_term,
-                  p_term_code   => v_term,
-                  p_offer_amt   => p_suAmount,
-                  p_awst_code   => v_awst_code_offered,
-                  p_awst_date   =>
-                      TO_DATE (
-                              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-                              'MM/DD/YYYY HH24:MI:SS'));
+        rp_award_schedule.p_update (
+          p_aidy_code   => v_aidy_code,
+          p_pidm        => v_student_pidm,
+          p_fund_code   => p_suScholarshipCode,
+          p_period      => v_term,
+          p_term_code   => v_term,
+          p_offer_amt   => p_suAmount,
+          p_awst_code   => v_awst_code_offered,
+          p_awst_date   =>
+            TO_DATE (
+              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+              'MM/DD/YYYY HH24:MI:SS'));
       WHEN (p_eventNotificationId = 701) AND p_suPostType = 'Add'
       --701 posted 'A'
       THEN
@@ -822,19 +828,25 @@ AS
     END CASE;
 
     UPDATE baninst1.zclelog
-        SET zclelog_processed = SYSDATE;
+       SET zclelog_processed = SYSDATE;
+
     COMMIT;
-
-    EXCEPTION
-      WHEN OTHERS THEN
-
+  EXCEPTION
+    WHEN OTHERS
+    THEN
       v_error_code := SQLCODE;
-      v_error_message := trunc(SQLERRM, 511);
+      v_error_message := TRUNC (SQLERRM, 511);
 
-      INSERT INTO baninst1.zclerrm (zclerrm_eventid, zclerrm_code, zclerrm_message, zclerrm_create_date)
-      VALUES(p_eventId, v_error_code, v_error_message, SYSDATE);
+      INSERT INTO baninst1.zclerrm (zclerrm_eventid,
+                                    zclerrm_code,
+                                    zclerrm_message,
+                                    zclerrm_create_date)
+           VALUES (p_eventId,
+                   v_error_code,
+                   v_error_message,
+                   SYSDATE);
+
       COMMIT;
-
   END p_su_transaction;
 END z_campuslogic_interface;
 /
