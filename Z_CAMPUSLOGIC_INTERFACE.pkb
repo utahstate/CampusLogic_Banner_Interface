@@ -34,12 +34,14 @@ AS
     1.3.5    20171205  Steven Francom, USU  updated v_banner_verify_code for clarity
     1.4      20190417  Carl Ellsworth, USU  added handling for 209 events
     1.4.1    20190429  Carl Ellsworth, USU  changed 209 logic to ROBNYUD update
-    2.0      20210802  Miles Canfield, USU  expansion to accomadate Scholarship Universe
+    2.0      20210802  Miles Canfield, USU  expansion to accommodate Scholarship Universe
     2.0.1    20210809  Carl & Miles, USU    logic changes for cl-connect limitations
     2.0.2                                   removal of USU specific block
     2.0.3    20210818  Miles Canfield, USU  split p_transaction into SF and SU parts
     2.0.4    20210825  Miles Canfield, USU  put rp_award create outside case statement
                                               isolated SU event updates as a result
+    2.0.5    20210826  Miles Canfield, USU  update events that already exist and add
+                                              better logging of errors
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -81,7 +83,17 @@ AS
     ZCLELOG_SUPOSTBATCHUSER            VARCHAR2 (100 CHAR),
     ZCLELOG_SUPOSTTYPE                 VARCHAR2 (30 CHAR),
     ZCLELOG_SUTERMCOMMENTS             VARCHAR2 (4000 CHAR),
-    ZCLELOG_ACTIVITY                   DATE DEFAULT SYSDATE
+    ZCLELOG_ACTIVITY                   DATE DEFAULT SYSDATE,
+    ZCLELOG_VERSION                    INTEGER DEFAULT 1,
+    ZCLELOG_PROCESSED                  DATE
+  );
+
+  CREATE TABLE BANINST1.ZCLERRM
+  (
+    ZCLERRM_EVENTID       VARCHAR2 (100),
+    ZCLERRM_CODE          INTEGER,
+    ZCLERRM_MESSAGE       VARCHAR2 (300),
+    ZCLERRM_CREATE_DATE   DATE DEFAULT SYSDATE
   );
 
   DROP TABLE BANINST1.ZCLXWLK;
@@ -336,25 +348,31 @@ AS
 
     --log the incoming transaction
     BEGIN
-      INSERT INTO baninst1.zclelog (zclelog_studentid,
-                                    zclelog_pidm,
-                                    zclelog_awardyear,
-                                    zclelog_eventid,
-                                    zclelog_eventnotificationname,
-                                    zclelog_eventdatetime,
-                                    zclelog_eventnotificationid,
-                                    zclelog_sftransactioncategoryid,
-                                    zclelog_sfdocumentname,
-                                    zclelog_sutermcode,
-                                    zclelog_suscholarshipawardid,
-                                    zclelog_suscholarshipname,
-                                    zclelog_suscholarshipcode,
-                                    zclelog_suamount,
-                                    zclelog_supostbatchuser,
-                                    zclelog_suposttype,
-                                    zclelog_sutermcomments,
-                                    zclelog_activity,
-                                    zclelog_create_date)
+        MERGE INTO baninst1.zclelog USING dual ON (zclelog_eventid = p_eventId)
+        WHEN MATCHED THEN
+            UPDATE SET zclelog_activity = SYSDATE,
+                       zclelog_version = zclelog_version + 1
+        WHEN NOT MATCHED THEN
+            INSERT (zclelog_studentid,
+                    zclelog_pidm,
+                    zclelog_awardyear,
+                    zclelog_eventid,
+                    zclelog_eventnotificationname,
+                    zclelog_eventdatetime,
+                    zclelog_eventnotificationid,
+                    zclelog_sftransactioncategoryid,
+                    zclelog_sfdocumentname,
+                    zclelog_sutermcode,
+                    zclelog_suscholarshipawardid,
+                    zclelog_suscholarshipname,
+                    zclelog_suscholarshipcode,
+                    zclelog_suamount,
+                    zclelog_supostbatchuser,
+                    zclelog_suposttype,
+                    zclelog_sutermcomments,
+                    zclelog_activity,
+                    zclelog_processed,
+                    zclelog_create_date)
            VALUES (p_studentId,
                    v_student_pidm,
                    v_aidy_code,
@@ -373,6 +391,7 @@ AS
                    NULL,
                    NULL,
                    SYSDATE,
+                   NULL,
                    SYSDATE);
 
       COMMIT;
@@ -548,6 +567,21 @@ AS
       END IF;
     --end extender logic
     END IF;
+
+    UPDATE baninst1.zclelog
+    SET zclelog_processed = SYSDATE;
+    COMMIT;
+
+  EXCEPTION
+      WHEN OTHERS THEN
+
+          v_error_code := SQLCODE;
+          v_error_message := trunc(SQLERRM, 511);
+
+          INSERT INTO baninst1.zclerrm (zclerrm_eventid, zclerrm_code, zclerrm_message, zclerrm_create_date)
+          VALUES(p_eventId, v_error_code, v_error_message, SYSDATE);
+          COMMIT;
+
   END p_sf_transaction;
 
   /**
@@ -575,6 +609,9 @@ AS
     v_aidy_code                      VARCHAR2 (4) := NULL;
     v_term                           VARCHAR2 (6);
     v_exists                         VARCHAR2 (1) := 'N';
+
+    v_error_code                     NUMBER := NULL;
+    v_error_message                  VARCHAR2 (511) := NULL;
 
     --update these constants to your Banner specific needs
     v_awst_code_pending     CONSTANT VARCHAR2 (4) := 'P';
@@ -619,25 +656,31 @@ AS
 
     --log the incoming transaction
     BEGIN
-      INSERT INTO baninst1.zclelog (zclelog_studentid,
-                                    zclelog_pidm,
-                                    zclelog_awardyear,
-                                    zclelog_eventid,
-                                    zclelog_eventnotificationname,
-                                    zclelog_eventdatetime,
-                                    zclelog_eventnotificationid,
-                                    zclelog_sftransactioncategoryid,
-                                    zclelog_sfdocumentname,
-                                    zclelog_sutermcode,
-                                    zclelog_suscholarshipawardid,
-                                    zclelog_suscholarshipname,
-                                    zclelog_suscholarshipcode,
-                                    zclelog_suamount,
-                                    zclelog_supostbatchuser,
-                                    zclelog_suposttype,
-                                    zclelog_sutermcomments,
-                                    zclelog_activity,
-                                    zclelog_create_date)
+      MERGE INTO baninst1.zclelog USING dual ON (zclelog_eventid = p_eventId)
+      WHEN MATCHED THEN
+          UPDATE SET zclelog_activity = SYSDATE,
+                     zclelog_version = zclelog_version + 1
+      WHEN NOT MATCHED THEN
+          INSERT (zclelog_studentid,
+                  zclelog_pidm,
+                  zclelog_awardyear,
+                  zclelog_eventid,
+                  zclelog_eventnotificationname,
+                  zclelog_eventdatetime,
+                  zclelog_eventnotificationid,
+                  zclelog_sftransactioncategoryid,
+                  zclelog_sfdocumentname,
+                  zclelog_sutermcode,
+                  zclelog_suscholarshipawardid,
+                  zclelog_suscholarshipname,
+                  zclelog_suscholarshipcode,
+                  zclelog_suamount,
+                  zclelog_supostbatchuser,
+                  zclelog_suposttype,
+                  zclelog_sutermcomments,
+                  zclelog_activity,
+                  zclelog_processed,
+                  zclelog_create_date)
            VALUES (p_studentId,
                    v_student_pidm,
                    v_aidy_code,
@@ -656,6 +699,7 @@ AS
                    p_suPostType,
                    p_suTermComments,
                    SYSDATE,
+                   NULL,
                    SYSDATE);
 
       COMMIT;
@@ -775,6 +819,21 @@ AS
               SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
               'MM/DD/YYYY HH24:MI:SS'));
     END CASE;
+
+    UPDATE baninst1.zclelog
+        SET zclelog_processed = SYSDATE;
+    COMMIT;
+
+    EXCEPTION
+      WHEN OTHERS THEN
+
+      v_error_code := SQLCODE;
+      v_error_message := trunc(SQLERRM, 511);
+
+      INSERT INTO baninst1.zclerrm (zclerrm_eventid, zclerrm_code, zclerrm_message, zclerrm_create_date)
+      VALUES(p_eventId, v_error_code, v_error_message, SYSDATE);
+      COMMIT;
+
   END p_su_transaction;
 END z_campuslogic_interface;
 /
