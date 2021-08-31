@@ -34,6 +34,7 @@ AS
     1.3.5    20171205  Steven Francom, USU  updated v_banner_verify_code for clarity
     1.4      20190417  Carl Ellsworth, USU  added handling for 209 events
     1.4.1    20190429  Carl Ellsworth, USU  changed 209 logic to ROBNYUD update
+    2.0.a    20210726  Kevin Le, CCFS       initial work on Scholarship Universe
     2.0      20210802  Miles Canfield, USU  expansion to accommodate Scholarship Universe
     2.0.1    20210809  Carl & Miles, USU    logic changes for cl-connect limitations
     2.0.2                                   removal of USU specific block
