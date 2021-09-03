@@ -774,8 +774,8 @@ AS
             TO_DATE (
               SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
               'MM/DD/YYYY HH24:MI:SS'));
-      WHEN (p_eventNotificationId = 701) AND p_suPostType = 'Add'
-      --701 posted 'A'
+      WHEN (p_eventNotificationId = 704)
+      --704 ready to post 'A'
       THEN
         rp_award_schedule.p_update (
           p_aidy_code    => v_aidy_code,
