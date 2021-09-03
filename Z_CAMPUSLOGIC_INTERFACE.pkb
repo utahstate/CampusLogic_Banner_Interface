@@ -93,7 +93,7 @@ AS
   (
     ZCLERRM_EVENTID       VARCHAR2 (100),
     ZCLERRM_CODE          INTEGER,
-    ZCLERRM_MESSAGE       VARCHAR2 (300),
+    ZCLERRM_MESSAGE       VARCHAR2 (512),
     ZCLERRM_CREATE_DATE   DATE DEFAULT SYSDATE
   );
 
@@ -572,14 +572,15 @@ AS
     END IF;
 
     UPDATE baninst1.zclelog
-       SET zclelog_processed = SYSDATE;
+       SET zclelog_processed = SYSDATE
+       WHERE zclelog_eventid = p_eventId;
 
     COMMIT;
   EXCEPTION
     WHEN OTHERS
     THEN
       v_error_code := SQLCODE;
-      v_error_message := TRUNC (SQLERRM, 511);
+      v_error_message := SUBSTR (SQLERRM, 0, 510);
 
       INSERT INTO baninst1.zclerrm (zclerrm_eventid,
                                     zclerrm_code,
@@ -828,14 +829,15 @@ AS
     END CASE;
 
     UPDATE baninst1.zclelog
-       SET zclelog_processed = SYSDATE;
+       SET zclelog_processed = SYSDATE
+       WHERE zclelog_eventid = p_eventId;
 
     COMMIT;
   EXCEPTION
     WHEN OTHERS
     THEN
       v_error_code := SQLCODE;
-      v_error_message := TRUNC (SQLERRM, 511);
+      v_error_message := SUBSTR (SQLERRM, 0, 510);
 
       INSERT INTO baninst1.zclerrm (zclerrm_eventid,
                                     zclerrm_code,
