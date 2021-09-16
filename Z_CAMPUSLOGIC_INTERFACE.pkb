@@ -410,7 +410,7 @@ AS
       raise_application_error (
         -20404,
         'ERROR: student pidm not found for ' || p_studentId);
-    ELSIF p_sfAwardYear IS NULL
+    ELSIF p_sfAwardYear IS NULL AND p_eventNotificationId != 209
     THEN
       raise_application_error (
         -20400,
