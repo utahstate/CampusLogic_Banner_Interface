@@ -26,7 +26,6 @@ Primary procedures called from CLCONNECT:
     p_eventNotificationId       INTEGER,
     p_eventId                   VARCHAR2 DEFAULT NULL,
     p_eventNotificationName     VARCHAR2 DEFAULT NULL,
-    p_eventDateTime             VARCHAR2 DEFAULT NULL,
     p_sfAwardYear               VARCHAR2 DEFAULT NULL,
     p_sfTransactionCategoryId   INTEGER DEFAULT NULL,
     p_sfDocumentName            VARCHAR2 DEFAULT NULL);
