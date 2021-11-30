@@ -625,7 +625,7 @@ AS
     --update these constants to your Banner specific needs
     v_awst_code_pending     CONSTANT VARCHAR2 (4) := 'P';
     v_awst_code_offered     CONSTANT VARCHAR2 (4) := 'O';        --703 offered
-    v_awst_code_accepted    CONSTANT VARCHAR2 (4) := 'A';        --701 posted
+    v_awst_code_accepted    CONSTANT VARCHAR2 (4) := 'A';        --704 ready to post
     v_awst_code_cancelled   CONSTANT VARCHAR2 (4) := 'C';        --706 removed
     v_awst_code_declined    CONSTANT VARCHAR2 (4) := 'D';        --705 declined
   BEGIN
