@@ -1,4 +1,4 @@
-/* Formatted on 1/6/2022 3:55:10 PM (QP5 v5.371) */
+/* Formatted on 1/6/2022 4:51:14 PM (QP5 v5.371) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -747,10 +747,9 @@ AS
                'MM/DD/YYYY HH24:MI:SS');
 
     v_exists :=
-      rp_award_schedule.f_exists (p_aidy_code   => v_aidy_code,
-                                  p_pidm        => v_student_pidm,
-                                  p_fund_code   => p_suScholarshipCode,
-                                  p_term_code   => v_term);
+      rp_award.f_exists (p_aidy_code   => v_aidy_code,
+                         p_pidm        => v_student_pidm,
+                         p_fund_code   => p_suScholarshipCode);
 
     IF (v_exists = 'N')
     THEN
