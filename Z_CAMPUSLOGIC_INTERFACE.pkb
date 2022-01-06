@@ -1,4 +1,4 @@
-/* Formatted on 8/31/2021 1:18:49 PM (QP5 v5.371) */
+/* Formatted on 1/6/2022 3:55:10 PM (QP5 v5.371) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -43,6 +43,7 @@ AS
                                               isolated SU event updates as a result
     2.0.5    20210826  Miles Canfield, USU  update events that already exist and add
                                               better logging of errors
+    2.0.6    20220106  Miles & Carl, USU    update rp-award call with unmet need override
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -350,12 +351,16 @@ AS
 
     --log the incoming transaction
     BEGIN
-        MERGE INTO baninst1.zclelog USING dual ON (zclelog_eventid = p_eventId)
-        WHEN MATCHED THEN
-            UPDATE SET zclelog_activity = SYSDATE,
-                       zclelog_version = zclelog_version + 1
-        WHEN NOT MATCHED THEN
-            INSERT (zclelog_studentid,
+      MERGE INTO baninst1.zclelog
+           USING DUAL
+              ON (zclelog_eventid = p_eventId)
+      WHEN MATCHED
+      THEN
+        UPDATE SET
+          zclelog_activity = SYSDATE, zclelog_version = zclelog_version + 1
+      WHEN NOT MATCHED
+      THEN
+        INSERT     (zclelog_studentid,
                     zclelog_pidm,
                     zclelog_awardyear,
                     zclelog_eventid,
@@ -375,26 +380,26 @@ AS
                     zclelog_activity,
                     zclelog_processed,
                     zclelog_create_date)
-           VALUES (p_studentId,
-                   v_student_pidm,
-                   v_aidy_code,
-                   p_eventId,
-                   p_eventNotificationName,
-                   NULL,
-                   p_eventNotificationId,
-                   p_sfTransactionCategoryId,
-                   p_sfDocumentName,
-                   NULL,
-                   NULL,
-                   NULL,
-                   NULL,
-                   NULL,
-                   NULL,
-                   NULL,
-                   NULL,
-                   SYSDATE,
-                   NULL,
-                   SYSDATE);
+            VALUES (p_studentId,
+                    v_student_pidm,
+                    v_aidy_code,
+                    p_eventId,
+                    p_eventNotificationName,
+                    NULL,
+                    p_eventNotificationId,
+                    p_sfTransactionCategoryId,
+                    p_sfDocumentName,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    SYSDATE,
+                    NULL,
+                    SYSDATE);
 
       COMMIT;
     EXCEPTION
@@ -572,7 +577,7 @@ AS
 
     UPDATE baninst1.zclelog
        SET zclelog_processed = SYSDATE
-       WHERE zclelog_eventid = p_eventId;
+     WHERE zclelog_eventid = p_eventId;
 
     COMMIT;
   EXCEPTION
@@ -618,6 +623,7 @@ AS
     v_aidy_code                      VARCHAR2 (4) := NULL;
     v_term                           VARCHAR2 (6);
     v_exists                         VARCHAR2 (1) := 'N';
+    v_event_date_time                DATE := NULL;
 
     v_error_code                     NUMBER := NULL;
     v_error_message                  VARCHAR2 (511) := NULL;
@@ -625,9 +631,9 @@ AS
     --update these constants to your Banner specific needs
     v_awst_code_pending     CONSTANT VARCHAR2 (4) := 'P';
     v_awst_code_offered     CONSTANT VARCHAR2 (4) := 'O';        --703 offered
-    v_awst_code_accepted    CONSTANT VARCHAR2 (4) := 'A';        --704 ready to post
+    v_awst_code_accepted    CONSTANT VARCHAR2 (4) := 'A';         --701 posted
     v_awst_code_cancelled   CONSTANT VARCHAR2 (4) := 'C';        --706 removed
-    v_awst_code_declined    CONSTANT VARCHAR2 (4) := 'D';        --705 declined
+    v_awst_code_declined    CONSTANT VARCHAR2 (4) := 'D';       --705 declined
   BEGIN
     --Determine if StudentID matches a single record in Banner
     BEGIN
@@ -665,51 +671,55 @@ AS
 
     --log the incoming transaction
     BEGIN
-      MERGE INTO baninst1.zclelog USING dual ON (zclelog_eventid = p_eventId)
-      WHEN MATCHED THEN
-          UPDATE SET zclelog_activity = SYSDATE,
-                     zclelog_version = zclelog_version + 1
-      WHEN NOT MATCHED THEN
-          INSERT (zclelog_studentid,
-                  zclelog_pidm,
-                  zclelog_awardyear,
-                  zclelog_eventid,
-                  zclelog_eventnotificationname,
-                  zclelog_eventdatetime,
-                  zclelog_eventnotificationid,
-                  zclelog_sftransactioncategoryid,
-                  zclelog_sfdocumentname,
-                  zclelog_sutermcode,
-                  zclelog_suscholarshipawardid,
-                  zclelog_suscholarshipname,
-                  zclelog_suscholarshipcode,
-                  zclelog_suamount,
-                  zclelog_supostbatchuser,
-                  zclelog_suposttype,
-                  zclelog_sutermcomments,
-                  zclelog_activity,
-                  zclelog_processed,
-                  zclelog_create_date)
-           VALUES (p_studentId,
-                   v_student_pidm,
-                   v_aidy_code,
-                   p_eventId,
-                   p_eventNotificationName,
-                   p_eventDateTime,
-                   p_eventNotificationId,
-                   NULL,
-                   NULL,
-                   v_term,
-                   p_suScholarshipAwardId,
-                   p_suScholarshipName,
-                   p_suScholarshipCode,
-                   p_suAmount,
-                   p_suPostBatchUser,
-                   p_suPostType,
-                   p_suTermComments,
-                   SYSDATE,
-                   NULL,
-                   SYSDATE);
+      MERGE INTO baninst1.zclelog
+           USING DUAL
+              ON (zclelog_eventid = p_eventId)
+      WHEN MATCHED
+      THEN
+        UPDATE SET
+          zclelog_activity = SYSDATE, zclelog_version = zclelog_version + 1
+      WHEN NOT MATCHED
+      THEN
+        INSERT     (zclelog_studentid,
+                    zclelog_pidm,
+                    zclelog_awardyear,
+                    zclelog_eventid,
+                    zclelog_eventnotificationname,
+                    zclelog_eventdatetime,
+                    zclelog_eventnotificationid,
+                    zclelog_sftransactioncategoryid,
+                    zclelog_sfdocumentname,
+                    zclelog_sutermcode,
+                    zclelog_suscholarshipawardid,
+                    zclelog_suscholarshipname,
+                    zclelog_suscholarshipcode,
+                    zclelog_suamount,
+                    zclelog_supostbatchuser,
+                    zclelog_suposttype,
+                    zclelog_sutermcomments,
+                    zclelog_activity,
+                    zclelog_processed,
+                    zclelog_create_date)
+            VALUES (p_studentId,
+                    v_student_pidm,
+                    v_aidy_code,
+                    p_eventId,
+                    p_eventNotificationName,
+                    p_eventDateTime,
+                    p_eventNotificationId,
+                    NULL,
+                    NULL,
+                    v_term,
+                    p_suScholarshipAwardId,
+                    p_suScholarshipName,
+                    p_suScholarshipCode,
+                    p_suAmount,
+                    p_suPostBatchUser,
+                    p_suPostType,
+                    p_suTermComments,
+                    SYSDATE,
+                    NULL,
+                    SYSDATE);
 
       COMMIT;
     EXCEPTION
@@ -732,6 +742,10 @@ AS
         'ERROR: aid year or term name is required to process transaction');
     END IF;
 
+    v_event_date_time :=
+      TO_DATE (SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
+               'MM/DD/YYYY HH24:MI:SS');
+
     v_exists :=
       rp_award_schedule.f_exists (p_aidy_code   => v_aidy_code,
                                   p_pidm        => v_student_pidm,
@@ -740,20 +754,11 @@ AS
 
     IF (v_exists = 'N')
     THEN
-      rp_award_schedule.p_create (
-        p_aidy_code   => v_aidy_code,
-        p_pidm        => v_student_pidm,
-        p_fund_code   => p_suScholarshipCode,
-        p_period      => v_term,
-        p_term_code   => v_term,
-        p_offer_amt   => p_suAmount,
-        p_offer_date   =>
-          TO_DATE (SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-                   'MM/DD/YYYY HH24:MI:SS'),
-        p_awst_code   => v_awst_code_pending,
-        p_awst_date   =>
-          TO_DATE (SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-                   'MM/DD/YYYY HH24:MI:SS'));
+      rp_award.p_create (p_aidy_code              => v_aidy_code,
+                         p_pidm                   => v_student_pidm,
+                         p_fund_code              => p_suScholarshipCode,
+                         p_offer_amt              => 0, --load zero first to get override indicator set to Y
+                         p_unmet_need_ovrde_ind   => 'Y');
     END IF;
 
     --BANNER LOGIC
@@ -761,75 +766,56 @@ AS
       WHEN (p_eventNotificationId = 703)
       --703 offered 'O'
       THEN
-        rp_award_schedule.p_update (
-          p_aidy_code   => v_aidy_code,
-          p_pidm        => v_student_pidm,
-          p_fund_code   => p_suScholarshipCode,
-          p_period      => v_term,
-          p_term_code   => v_term,
-          p_offer_amt   => p_suAmount,
-          p_awst_code   => v_awst_code_offered,
-          p_awst_date   =>
-            TO_DATE (
-              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-              'MM/DD/YYYY HH24:MI:SS'));
+        rp_award_schedule.p_update (p_aidy_code   => v_aidy_code,
+                                    p_pidm        => v_student_pidm,
+                                    p_fund_code   => p_suScholarshipCode,
+                                    p_period      => v_term,
+                                    p_term_code   => v_term,
+                                    p_offer_amt   => p_suAmount,
+                                    p_awst_code   => v_awst_code_offered,
+                                    p_awst_date   => v_event_date_time);
       WHEN (p_eventNotificationId = 704)
       --704 ready to post 'A'
       THEN
-        rp_award_schedule.p_update (
-          p_aidy_code    => v_aidy_code,
-          p_pidm         => v_student_pidm,
-          p_fund_code    => p_suScholarshipCode,
-          p_period       => v_term,
-          p_term_code    => v_term,
-          p_offer_amt    => p_suAmount,
-          p_accept_amt   => p_suAmount,
-          p_accept_date  =>
-            TO_DATE (
-              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-              'MM/DD/YYYY HH24:MI:SS'),
-          p_awst_code    => v_awst_code_accepted,
-          p_awst_date    =>
-            TO_DATE (
-              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-              'MM/DD/YYYY HH24:MI:SS'));
+        rp_award_schedule.p_update (p_aidy_code     => v_aidy_code,
+                                    p_pidm          => v_student_pidm,
+                                    p_fund_code     => p_suScholarshipCode,
+                                    p_period        => v_term,
+                                    p_term_code     => v_term,
+                                    p_offer_amt     => p_suAmount,
+                                    p_accept_amt    => p_suAmount,
+                                    p_accept_date   => v_event_date_time,
+                                    p_awst_code     => v_awst_code_accepted,
+                                    p_awst_date     => v_event_date_time);
       WHEN (p_eventNotificationId = 705)
       --705 declined 'D'
       THEN
-        rp_award_schedule.p_update (
-          p_aidy_code   => v_aidy_code,
-          p_pidm        => v_student_pidm,
-          p_fund_code   => p_suScholarshipCode,
-          p_period      => v_term,
-          p_term_code   => v_term,
-          p_offer_amt   => 0,
-          p_accept_amt  => 0,
-          p_awst_code   => v_awst_code_declined,
-          p_awst_date   =>
-            TO_DATE (
-              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-              'MM/DD/YYYY HH24:MI:SS'));
+        rp_award_schedule.p_update (p_aidy_code    => v_aidy_code,
+                                    p_pidm         => v_student_pidm,
+                                    p_fund_code    => p_suScholarshipCode,
+                                    p_period       => v_term,
+                                    p_term_code    => v_term,
+                                    p_offer_amt    => 0,
+                                    p_accept_amt   => 0,
+                                    p_awst_code    => v_awst_code_declined,
+                                    p_awst_date    => v_event_date_time);
       WHEN (p_eventNotificationId = 706)
       --706 removed 'C'
       THEN
-        rp_award_schedule.p_update (
-          p_aidy_code   => v_aidy_code,
-          p_pidm        => v_student_pidm,
-          p_fund_code   => p_suScholarshipCode,
-          p_period      => v_term,
-          p_term_code   => v_term,
-          p_offer_amt   => 0,
-          p_accept_amt  => 0,
-          p_awst_code   => v_awst_code_cancelled,
-          p_awst_date   =>
-            TO_DATE (
-              SUBSTR (p_eventDateTime, 1, LENGTH (p_eventDateTime) - 3),
-              'MM/DD/YYYY HH24:MI:SS'));
+        rp_award_schedule.p_update (p_aidy_code    => v_aidy_code,
+                                    p_pidm         => v_student_pidm,
+                                    p_fund_code    => p_suScholarshipCode,
+                                    p_period       => v_term,
+                                    p_term_code    => v_term,
+                                    p_offer_amt    => 0,
+                                    p_accept_amt   => 0,
+                                    p_awst_code    => v_awst_code_cancelled,
+                                    p_awst_date    => v_event_date_time);
     END CASE;
 
     UPDATE baninst1.zclelog
        SET zclelog_processed = SYSDATE
-       WHERE zclelog_eventid = p_eventId;
+     WHERE zclelog_eventid = p_eventId;
 
     COMMIT;
   EXCEPTION
