@@ -1,4 +1,4 @@
-/* Formatted on 1/6/2022 4:51:14 PM (QP5 v5.371) */
+/* Formatted on 1/6/2022 5:21:57 PM (QP5 v5.371) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -757,7 +757,9 @@ AS
                          p_pidm                   => v_student_pidm,
                          p_fund_code              => p_suScholarshipCode,
                          p_offer_amt              => 0, --load zero first to get override indicator set to Y
-                         p_unmet_need_ovrde_ind   => 'Y');
+                         p_unmet_need_ovrde_ind   => 'Y',
+                         p_awst_code              => v_awst_code_pending,
+                         p_awst_date              => v_event_date_time);
     END IF;
 
     --BANNER LOGIC
