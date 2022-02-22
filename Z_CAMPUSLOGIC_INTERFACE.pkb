@@ -758,7 +758,7 @@ AS
                          p_fund_code              => p_suScholarshipCode,
                          p_offer_amt              => 0, --load zero first to get override indicator set to Y
                          p_unmet_need_ovrde_ind   => 'Y',
-                         p_awst_code              => v_awst_code_pending,
+                         p_awst_code              => v_awst_code_offered,
                          p_awst_date              => v_event_date_time);
     END IF;
 
