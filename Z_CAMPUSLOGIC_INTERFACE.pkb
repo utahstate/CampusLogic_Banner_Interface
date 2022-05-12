@@ -11,39 +11,40 @@ AS
                 TREQ types.
 
     REVISIONS:
-    Ver      Date      Author               Description
-    -------  --------  -------------------  ------------------------------------
-    .9b      20160317  Marty Carver, Weber  provided reference components
-    1.0      20160318  Carl Ellsworth, USU  created this package
-    1.1      20160325  Carl Ellsworth &     updated process with additional
-                       John Mays, USU         logic
-    1.2      20160331  Carl Ellsworth       commented code for other users
-    1.2.1    20160510  Carl Ellsworth &     extended transaction categoy
-                       Steven Francom, USU    ids to include SAP and PJ
-    1.3      20160510  Carl Ellsworth &     added logic to update ROASTAT
-                       Steven Francom, USU    verification field on complete
-    1.3.1    20160517  Carl Ellsworth, USU  removed logic for fund_code,
-                                              cl_connect was throwing errors
-    1.3.2    20160523  Carl Ellsworth, USU  changed updated RRRAREQ records to
-                                              a sys_ind of 'B'
-    1.3.3    20160708  Carl Ellsworth, USU  updated p_status_upd_api to include
-                                              RORSTAT_VER_COMPLETE in processing
-    1.3.4    20160711  Carl Ellsworth, USU  updated p_status_upd_api, found that
-                                              p_ver_pay_ind and p_ver_complete
-                                              must be set in separate steps
-    1.3.5    20171205  Steven Francom, USU  updated v_banner_verify_code for clarity
-    1.4      20190417  Carl Ellsworth, USU  added handling for 209 events
-    1.4.1    20190429  Carl Ellsworth, USU  changed 209 logic to ROBNYUD update
-    2.0.a    20210726  Kevin Le, CCFS       initial work on Scholarship Universe
-    2.0      20210802  Miles Canfield, USU  expansion to accommodate Scholarship Universe
-    2.0.1    20210809  Carl & Miles, USU    logic changes for cl-connect limitations
-    2.0.2                                   removal of USU specific block
-    2.0.3    20210818  Miles Canfield, USU  split p_transaction into SF and SU parts
-    2.0.4    20210825  Miles Canfield, USU  put rp_award create outside case statement
-                                              isolated SU event updates as a result
-    2.0.5    20210826  Miles Canfield, USU  update events that already exist and add
-                                              better logging of errors
-    2.0.6    20220106  Miles & Carl, USU    update rp-award call with unmet need override
+    Ver      Date      Author                Description
+    -------  --------  --------------------  ------------------------------------
+    .9b      20160317  Marty Carver, Weber   provided reference components
+    1.0      20160318  Carl Ellsworth, USU   created this package
+    1.1      20160325  Carl Ellsworth &      updated process with additional
+                       John Mays, USU          logic
+    1.2      20160331  Carl Ellsworth        commented code for other users
+    1.2.1    20160510  Carl Ellsworth &      extended transaction categoy
+                       Steven Francom, USU     ids to include SAP and PJ
+    1.3      20160510  Carl Ellsworth &      added logic to update ROASTAT
+                       Steven Francom, USU     verification field on complete
+    1.3.1    20160517  Carl Ellsworth, USU   removed logic for fund_code,
+                                               cl_connect was throwing errors
+    1.3.2    20160523  Carl Ellsworth, USU   changed updated RRRAREQ records to
+                                               a sys_ind of 'B'
+    1.3.3    20160708  Carl Ellsworth, USU   updated p_status_upd_api to include
+                                               RORSTAT_VER_COMPLETE in processing
+    1.3.4    20160711  Carl Ellsworth, USU   updated p_status_upd_api, found that
+                                               p_ver_pay_ind and p_ver_complete
+                                               must be set in separate steps
+    1.3.5    20171205  Steven Francom, USU   updated v_banner_verify_code for clarity
+    1.4      20190417  Carl Ellsworth, USU   added handling for 209 events
+    1.4.1    20190429  Carl Ellsworth, USU   changed 209 logic to ROBNYUD update
+    2.0.a    20210726  Kevin Le, CCFS        initial work on Scholarship Universe
+    2.0      20210802  Autumn Canfield, USU  expansion to accommodate Scholarship Universe
+    2.0.1    20210809  Carl & Autumn, USU    logic changes for cl-connect limitations
+    2.0.2                                    removal of USU specific block
+    2.0.3    20210818  Autumn Canfield, USU  split p_transaction into SF and SU parts
+    2.0.4    20210825  Autumn Canfield, USU  put rp_award create outside case statement
+                                               isolated SU event updates as a result
+    2.0.5    20210826  Autumn Canfield, USU  update events that already exist and add
+                                               better logging of errors
+    2.0.6    20220106  Autumn & Carl, USU    update rp-award call with unmet need override
+    2.1.0    20220512  Autumn Canfield, USU  change 104 logic to update RRRAREQ for all categories
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -438,14 +439,11 @@ AS
         END IF;
       WHEN (p_eventNotificationId = 104)
       THEN                                      --104 is Correction(see notes)
-        IF (NVL (p_sfTransactionCategoryId, 0) = 1)     --Student Verification
-        THEN
-          p_tracking_upd_api (p_pidm        => v_student_pidm,
-                              p_awardYear   => v_aidy_code,
-                              p_treqCode    => v_banner_verify_code,
-                              p_status      => 'Q',             --from RTVTRST
-                              p_sysInd      => 'B');
-        END IF;
+        p_tracking_upd_api (p_pidm        => v_student_pidm,
+                            p_awardYear   => v_aidy_code,
+                            p_treqCode    => v_banner_verify_code,
+                            p_status      => 'Q',             --from RTVTRST
+                            p_sysInd      => 'B');
       WHEN (p_eventNotificationId = 105 AND p_sfDocumentName IS NULL)
       THEN                          --105 is Transaction Completed (see notes)
         CASE
