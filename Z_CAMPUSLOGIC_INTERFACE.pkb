@@ -45,6 +45,8 @@ AS
                                                better logging of errors
     2.0.6    20220106  Autumn & Carl, USU    update rp-award call with unmet need override
     2.1.0    20220512  Autumn Canfield, USU  change 104 logic to update RRRAREQ for all categories
+    2.1.1    20220602  Autumn Canfield, USU  change creation and 706 logic to prevent $0
+                                               canceled scholarships from being visible
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -749,7 +751,8 @@ AS
                          p_pidm        => v_student_pidm,
                          p_fund_code   => p_suScholarshipCode);
 
-    IF (v_exists = 'N')
+    -- Only create scholarship record if it doesn't exist and is not being removed.
+    IF (v_exists = 'N' AND p_eventNotificationId != 706)
     THEN
       rp_award.p_create (p_aidy_code              => v_aidy_code,
                          p_pidm                   => v_student_pidm,
@@ -798,8 +801,10 @@ AS
                                     p_accept_amt   => 0,
                                     p_awst_code    => v_awst_code_declined,
                                     p_awst_date    => v_event_date_time);
-      WHEN (p_eventNotificationId = 706)
+      WHEN (p_eventNotificationId = 706 and v_exists != 'N')
       --706 removed 'C'
+      -- Only attempt to remove scholarships that already exist to prevent $0
+      -- canceled scholarships from being created on student's accounts.
       THEN
         rp_award_schedule.p_update (p_aidy_code    => v_aidy_code,
                                     p_pidm         => v_student_pidm,
