@@ -47,6 +47,8 @@ AS
     2.1.0    20220512  Autumn Canfield, USU  change 104 logic to update RRRAREQ for all categories
     2.1.1    20220602  Autumn Canfield, USU  change creation and 706 logic to prevent $0
                                                canceled scholarships from being visible
+    2.1.2    20220622  Autumn Canfield, USU  change 103 and 104 events to update Banner
+                                               correctly for all transaction categories
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -427,90 +429,73 @@ AS
 
     --BANNER LOGIC
 
-    CASE
-      -- STUDENT FORMS
-      WHEN (p_eventNotificationId = 103)
-      THEN                                     --103 is File Review(see notes)
-        IF (NVL (p_sfTransactionCategoryId, 0) = 1)     --Student Verification
+    IF (p_eventNotificationId in (101, 103, 104, 105, 107)) THEN
+      CASE
+        WHEN (NVL (p_sfTransactionCategoryId, 0) = 1)
         THEN
+          v_treq_code := v_banner_verify_code;
+        WHEN (NVL (p_sfTransactionCategoryId, 0) = 2)
+        THEN
+          v_treq_code := v_banner_sap_code;
+        WHEN (NVL (p_sfTransactionCategoryId, 0) IN (3, 4))
+        THEN
+          v_treq_code := v_banner_pj_code;
+        ELSE
+          NULL;
+      END CASE;
+
+      CASE
+        -- STUDENT FORMS
+        WHEN (p_eventNotificationId = 103)
+        THEN                                     --103 is File Review(see notes)
           p_tracking_upd_api (p_pidm        => v_student_pidm,
                               p_awardYear   => v_aidy_code,
-                              p_treqCode    => v_banner_verify_code,
+                              p_treqCode    => v_treq_code,
                               p_status      => 'Z',             --from RTVTRST
                               p_sysInd      => 'B');
-        END IF;
-      WHEN (p_eventNotificationId = 104)
-      THEN                                      --104 is Correction(see notes)
-        p_tracking_upd_api (p_pidm        => v_student_pidm,
-                            p_awardYear   => v_aidy_code,
-                            p_treqCode    => v_banner_verify_code,
-                            p_status      => 'Q',             --from RTVTRST
-                            p_sysInd      => 'B');
-      WHEN (p_eventNotificationId = 105 AND p_sfDocumentName IS NULL)
-      THEN                          --105 is Transaction Completed (see notes)
-        CASE
-          WHEN NVL (p_sfTransactionCategoryId, 0) = 1   --Student Verification
-          THEN                      --update Banner RRRAREQ verify requirement
-            p_tracking_upd_api (p_pidm        => v_student_pidm,
-                                p_awardYear   => v_aidy_code,
-                                p_treqCode    => v_banner_verify_code,
-                                p_status      => 'C',           --from RTVTRST
-                                p_sysInd      => 'B');
+        WHEN (p_eventNotificationId = 104)
+        THEN                                      --104 is Correction(see notes)
+          p_tracking_upd_api (p_pidm        => v_student_pidm,
+                              p_awardYear   => v_aidy_code,
+                              p_treqCode    => v_treq_code,
+                              p_status      => 'Q',             --from RTVTRST
+                              p_sysInd      => 'B');
+        WHEN (p_eventNotificationId = 105 AND p_sfDocumentName IS NULL)
+        THEN                          --105 is Transaction Completed (see notes)
+          p_tracking_upd_api (p_pidm        => v_student_pidm,
+                              p_awardYear   => v_aidy_code,
+                              p_treqCode    => v_treq_code,
+                              p_status      => 'C',           --from RTVTRST
+                              p_sysInd      => 'B');
+          IF (NVL (p_sfTransactionCategoryId, 0) = 1)     --Student Verification
+          THEN
             p_status_upd_api (p_pidm          => v_student_pidm,
                               p_awardYear     => v_aidy_code,
                               p_verPayInd     => 'V',
                               p_verComplete   => 'Y');
-          WHEN NVL (p_sfTransactionCategoryId, 0) = 2             --SAP Appeal
-          THEN                         --update Banner RRRAREQ SAP requirement
-            p_tracking_upd_api (p_pidm        => v_student_pidm,
-                                p_awardYear   => v_aidy_code,
-                                p_treqCode    => v_banner_sap_code,
-                                p_status      => 'C',           --from RTVTRST
-                                p_sysInd      => 'B');
-          WHEN NVL (p_sfTransactionCategoryId, 0) IN (3, 4) --PJ Dependency Override Appeal
-          THEN                          --update Banner RRRAREQ PJ requirement
-            p_tracking_upd_api (p_pidm        => v_student_pidm,
-                                p_awardYear   => v_aidy_code,
-                                p_treqCode    => v_banner_pj_code,
-                                p_status      => 'C',           --from RTVTRST
-                                p_sysInd      => 'B');
+          END IF;
+        WHEN (p_eventNotificationId IN (101, 107) AND p_sfDocumentName IS NULL)
+        THEN
+          --101 is Transaction Collect (see notes)
+          --107 is Transaction ReCollect (see notes)
+          p_tracking_upd_api (p_pidm        => v_student_pidm,
+                              p_awardYear   => v_aidy_code,
+                              p_treqCode    => v_treq_code,
+                              p_status      => 'N',           --from RTVTRST
+                              p_sysInd      => 'B');
+        ELSE
+            NULL;
         END CASE;
-      WHEN (p_eventNotificationId IN (101, 107) AND p_sfDocumentName IS NULL)
-      THEN
-        --101 is Transaction Collect (see notes)
-        --107 is Transaction ReCollect (see notes)
-        CASE
-          WHEN NVL (p_sfTransactionCategoryId, 0) = 1   --Student Verification
-          THEN                      --update Banner RRRAREQ verify requirement
-            p_tracking_upd_api (p_pidm        => v_student_pidm,
-                                p_awardYear   => v_aidy_code,
-                                p_treqCode    => v_banner_verify_code,
-                                p_status      => 'N',           --from RTVTRST
-                                p_sysInd      => 'B');
-          WHEN NVL (p_sfTransactionCategoryId, 0) = 2             --SAP Appeal
-          THEN                         --update Banner RRRAREQ SAP requirement
-            p_tracking_upd_api (p_pidm        => v_student_pidm,
-                                p_awardYear   => v_aidy_code,
-                                p_treqCode    => v_banner_sap_code,
-                                p_status      => 'N',           --from RTVTRST
-                                p_sysInd      => 'B');
-          WHEN NVL (p_sfTransactionCategoryId, 0) IN (3, 4) --PJ Dependency Override Appeal
-          THEN                          --update Banner RRRAREQ PJ requirement
-            p_tracking_upd_api (p_pidm        => v_student_pidm,
-                                p_awardYear   => v_aidy_code,
-                                p_treqCode    => v_banner_pj_code,
-                                p_status      => 'N',           --from RTVTRST
-                                p_sysInd      => 'B');
-        END CASE;
-      WHEN (p_eventNotificationId = 209)
-      THEN                                --209 is Account Created (see notes)
-        UPDATE ROBNYUD
-           SET ROBNYUD_ACTIVITY_DATE = SYSDATE,
-               ROBNYUD_VALUE_3 = v_banner_creation_code
-         WHERE robnyud_pidm = v_student_pidm;
-      ELSE
-        NULL;
-    END CASE;
+    END IF;
+
+    IF (p_eventNotificationId = 209) THEN
+      --209 is Account Created (see notes)
+      UPDATE ROBNYUD
+      SET ROBNYUD_ACTIVITY_DATE = SYSDATE,
+          ROBNYUD_VALUE_3 = v_banner_creation_code
+      WHERE robnyud_pidm = v_student_pidm;
+    END IF;
+
 
     --EXTENDER LOGIC
     IF (    NVL (p_sfTransactionCategoryId, 0) >= 1
