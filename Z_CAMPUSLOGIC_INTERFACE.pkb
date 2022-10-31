@@ -1,4 +1,4 @@
-/* Formatted on 10/31/2022 12:04:37 PM (QP5 v5.381) */
+/* Formatted on 10/31/2022 1:11:31 PM (QP5 v5.388) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -298,9 +298,9 @@ AS
   AS
     v_system_ind    CONSTANT VARCHAR2 (1) := 'R';
     v_module_code   CONSTANT VARCHAR2 (1) := NULL;           --LMC-AL used 'R'
-    v_wait_days     CONSTANT NUMBER := 0;
+    v_wait_days     CONSTANT NUMBER := NULL;
     v_orig_ind      CONSTANT VARCHAR2 (1) := 'S';            --LMC-AL used 'E'
-    v_user          CONSTANT VARCHAR2 (60) := '';
+    v_user          CONSTANT VARCHAR2 (60) := 'Z_CLCONNECT';
     v_init_code     CONSTANT VARCHAR2 (1) := NULL;
   BEGIN
     INSERT INTO general.gurmail (gurmail_pidm,
@@ -874,5 +874,171 @@ AS
 
       COMMIT;
   END p_su_transaction;
+
+  /**
+  * Procedure called from CL Connect for Campus Connector transactions
+  *
+  * In Web.config on the CL Connect server, populate the field dbCommandFieldValue
+  * with the full path to this procedure, BANINST1.z_campuslogic_interface.p_cc_transaction
+  */
+  PROCEDURE p_cc_transaction (
+    p_studentId               VARCHAR2,
+    p_eventNotificationId     INTEGER,
+    p_eventId                 VARCHAR2 DEFAULT NULL,
+    p_eventNotificationName   VARCHAR2 DEFAULT NULL,
+    p_ccAwardYear             VARCHAR2 DEFAULT NULL)
+  AS
+    v_student_pidm    NUMBER := NULL;
+    v_aidy_code       VARCHAR2 (4) := NULL;
+
+    v_error_code      NUMBER := NULL;
+    v_error_message   VARCHAR2 (511) := NULL;
+  BEGIN
+    --Determine if StudentID matches a single record in Banner
+    BEGIN
+      SELECT spriden_pidm
+        INTO v_student_pidm
+        FROM spriden
+       WHERE spriden_change_ind IS NULL AND spriden_id = p_studentId;
+    EXCEPTION
+      WHEN NO_DATA_FOUND
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+          'ERROR: student not found for studentID ' || p_studentId);
+      WHEN TOO_MANY_ROWS
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+          'ERROR: duplicate pidm issue for studentID ' || p_studentId);
+    END;
+
+    --Determine if Aid Year exists in Banner
+    IF p_ccAwardYear IS NOT NULL
+    THEN
+      BEGIN
+        SELECT robinst_aidy_code
+          INTO v_aidy_code
+          FROM robinst
+         WHERE robinst_aidy_code = p_ccAwardYear;
+      EXCEPTION
+        WHEN NO_DATA_FOUND
+        THEN
+          v_aidy_code := NULL;
+          DBMS_OUTPUT.PUT_LINE (
+            'ERROR: award year is invalid: ' || p_ccAwardYear);
+        WHEN TOO_MANY_ROWS
+        THEN
+          v_aidy_code := NULL;
+          DBMS_OUTPUT.PUT_LINE (
+            'ERROR: award year is invalid: ' || p_ccAwardYear);
+      END;
+    END IF;
+
+    --log the incoming transaction
+    BEGIN
+      MERGE INTO baninst1.zclelog
+           USING DUAL
+              ON (zclelog_eventid = p_eventId)
+      WHEN MATCHED
+      THEN
+        UPDATE SET
+          zclelog_activity = SYSDATE, zclelog_version = zclelog_version + 1
+      WHEN NOT MATCHED
+      THEN
+        INSERT     (zclelog_studentid,
+                    zclelog_pidm,
+                    zclelog_awardyear,
+                    zclelog_eventid,
+                    zclelog_eventnotificationname,
+                    zclelog_eventdatetime,
+                    zclelog_eventnotificationid,
+                    zclelog_activity,
+                    zclelog_processed,
+                    zclelog_create_date)
+            VALUES (p_studentId,
+                    v_student_pidm,
+                    v_aidy_code,
+                    p_eventId,
+                    p_eventNotificationName,
+                    NULL,
+                    p_eventNotificationId,
+                    SYSDATE,
+                    NULL,
+                    SYSDATE);
+
+      COMMIT;
+    EXCEPTION
+      WHEN OTHERS
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+          'ERROR: failed to insert event notification into ZCLELOG');
+    END;
+
+    -- Custom Error Block
+    IF v_student_pidm IS NULL
+    THEN
+      raise_application_error (
+        -20404,
+        'ERROR: student pidm not found for ' || p_studentId);
+    ELSIF p_ccAwardYear IS NULL
+    THEN
+      raise_application_error (
+        -20400,
+        'ERROR: award year is required to process transaction');
+    END IF;
+
+    --BANNER LOGIC
+    BEGIN
+      --WHEN (p_eventNotificationId IN '501', '502')
+
+      --lookup the appropriate letter code
+      SELECT zclmail_letr_code
+        INTO v_letr_code
+        FROM zclmail
+       WHERE     zclmail_eventNotificationId = p_eventNotificationId
+             AND zclmail_aidy_code = v_aidy_code;
+
+      --create the contact record
+      p_create_gurmail (p_pidm        => v_student_pidm,
+                        p_aidy_code   => v_aidy_code,
+                        p_letr_code   => v_letr_code);
+    EXCEPTION
+      WHEN NO_DATA_FOUND
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+             'ERROR: check ZCLMAIL record for aid year '
+          || v_aidy_code
+          || ' and event '
+          || p_eventNotificationId);
+      WHEN TOO_MANY_ROWS
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+             'ERROR: check ZCLMAIL record for aid year '
+          || v_aidy_code
+          || ' and event '
+          || p_eventNotificationId);
+    END;
+
+    UPDATE baninst1.zclelog
+       SET zclelog_processed = SYSDATE
+     WHERE zclelog_eventid = p_eventId;
+
+    COMMIT;
+  EXCEPTION
+    WHEN OTHERS
+    THEN
+      v_error_code := SQLCODE;
+      v_error_message := SUBSTR (SQLERRM, 0, 510);
+
+      INSERT INTO baninst1.zclerrm (zclerrm_eventid,
+                                    zclerrm_code,
+                                    zclerrm_message,
+                                    zclerrm_create_date)
+           VALUES (p_eventId,
+                   v_error_code,
+                   v_error_message,
+                   SYSDATE);
+
+      COMMIT;
+  END p_cc_transaction;
 END z_campuslogic_interface;
 /
