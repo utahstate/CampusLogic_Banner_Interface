@@ -1,4 +1,4 @@
-/* Formatted on 1/6/2022 5:21:57 PM (QP5 v5.371) */
+/* Formatted on 10/31/2022 11:34:59 AM (QP5 v5.381) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -34,6 +34,8 @@ AS
     1.3.5    20171205  Steven Francom, USU   updated v_banner_verify_code for clarity
     1.4      20190417  Carl Ellsworth, USU   added handling for 209 events
     1.4.1    20190429  Carl Ellsworth, USU   changed 209 logic to ROBNYUD update
+    1.5      20200616  Carmen Pagán          Added code for inserting
+                                               award email record into gurmail
     2.0.a    20210726  Kevin Le, CCFS        initial work on Scholarship Universe
     2.0      20210802  Autumn Canfield, USU  expansion to accommodate Scholarship Universe
     2.0.1    20210809  Carl & Autumn, USU    logic changes for cl-connect limitations
@@ -49,6 +51,8 @@ AS
                                                canceled scholarships from being visible
     2.1.2    20220622  Autumn Canfield, USU  change 103 and 104 events to update Banner
                                                correctly for all transaction categories
+    2.2.0    20221031  Carl Ellsworth, USU   merged code from Carmen Pagán for use
+                                               integrating with Campus Connector
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -429,7 +433,12 @@ AS
 
     --BANNER LOGIC
 
-    IF (p_eventNotificationId in (101, 103, 104, 105, 107)) THEN
+    IF (p_eventNotificationId IN (101,
+                                  103,
+                                  104,
+                                  105,
+                                  107))
+    THEN
       CASE
         WHEN (NVL (p_sfTransactionCategoryId, 0) = 1)
         THEN
@@ -447,53 +456,56 @@ AS
       CASE
         -- STUDENT FORMS
         WHEN (p_eventNotificationId = 103)
-        THEN                                     --103 is File Review(see notes)
+        THEN                                   --103 is File Review(see notes)
           p_tracking_upd_api (p_pidm        => v_student_pidm,
                               p_awardYear   => v_aidy_code,
                               p_treqCode    => v_treq_code,
                               p_status      => 'Z',             --from RTVTRST
                               p_sysInd      => 'B');
         WHEN (p_eventNotificationId = 104)
-        THEN                                      --104 is Correction(see notes)
+        THEN                                    --104 is Correction(see notes)
           p_tracking_upd_api (p_pidm        => v_student_pidm,
                               p_awardYear   => v_aidy_code,
                               p_treqCode    => v_treq_code,
                               p_status      => 'Q',             --from RTVTRST
                               p_sysInd      => 'B');
         WHEN (p_eventNotificationId = 105 AND p_sfDocumentName IS NULL)
-        THEN                          --105 is Transaction Completed (see notes)
+        THEN                        --105 is Transaction Completed (see notes)
           p_tracking_upd_api (p_pidm        => v_student_pidm,
                               p_awardYear   => v_aidy_code,
                               p_treqCode    => v_treq_code,
-                              p_status      => 'C',           --from RTVTRST
+                              p_status      => 'C',             --from RTVTRST
                               p_sysInd      => 'B');
-          IF (NVL (p_sfTransactionCategoryId, 0) = 1)     --Student Verification
+
+          IF (NVL (p_sfTransactionCategoryId, 0) = 1)   --Student Verification
           THEN
             p_status_upd_api (p_pidm          => v_student_pidm,
                               p_awardYear     => v_aidy_code,
                               p_verPayInd     => 'V',
                               p_verComplete   => 'Y');
           END IF;
-        WHEN (p_eventNotificationId IN (101, 107) AND p_sfDocumentName IS NULL)
+        WHEN (    p_eventNotificationId IN (101, 107)
+              AND p_sfDocumentName IS NULL)
         THEN
           --101 is Transaction Collect (see notes)
           --107 is Transaction ReCollect (see notes)
           p_tracking_upd_api (p_pidm        => v_student_pidm,
                               p_awardYear   => v_aidy_code,
                               p_treqCode    => v_treq_code,
-                              p_status      => 'N',           --from RTVTRST
+                              p_status      => 'N',             --from RTVTRST
                               p_sysInd      => 'B');
         ELSE
-            NULL;
-        END CASE;
+          NULL;
+      END CASE;
     END IF;
 
-    IF (p_eventNotificationId = 209) THEN
+    IF (p_eventNotificationId = 209)
+    THEN
       --209 is Account Created (see notes)
       UPDATE ROBNYUD
-      SET ROBNYUD_ACTIVITY_DATE = SYSDATE,
-          ROBNYUD_VALUE_3 = v_banner_creation_code
-      WHERE robnyud_pidm = v_student_pidm;
+         SET ROBNYUD_ACTIVITY_DATE = SYSDATE,
+             ROBNYUD_VALUE_3 = v_banner_creation_code
+       WHERE robnyud_pidm = v_student_pidm;
     END IF;
 
 
@@ -786,7 +798,7 @@ AS
                                     p_accept_amt   => 0,
                                     p_awst_code    => v_awst_code_declined,
                                     p_awst_date    => v_event_date_time);
-      WHEN (p_eventNotificationId = 706 and v_exists != 'N')
+      WHEN (p_eventNotificationId = 706 AND v_exists != 'N')
       --706 removed 'C'
       -- Only attempt to remove scholarships that already exist to prevent $0
       -- canceled scholarships from being created on student's accounts.
