@@ -1,4 +1,4 @@
-/* Formatted on 10/31/2022 11:34:59 AM (QP5 v5.381) */
+/* Formatted on 10/31/2022 12:04:37 PM (QP5 v5.381) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -288,6 +288,44 @@ AS
     END IF;
   END p_update_xtender;
 
+  /**
+  * Inserts award letter record into GURMAIL
+  * merged from LMC-AL 1.3 (locally as 1.5)
+  */
+  PROCEDURE p_create_gurmail (p_pidm        NUMBER,
+                              p_aidy_code   VARCHAR2,
+                              p_letr_code   VARCHAR2)
+  AS
+    v_system_ind    CONSTANT VARCHAR2 (1) := 'R';
+    v_module_code   CONSTANT VARCHAR2 (1) := NULL;           --LMC-AL used 'R'
+    v_wait_days     CONSTANT NUMBER := 0;
+    v_orig_ind      CONSTANT VARCHAR2 (1) := 'S';            --LMC-AL used 'E'
+    v_user          CONSTANT VARCHAR2 (60) := '';
+    v_init_code     CONSTANT VARCHAR2 (1) := NULL;
+  BEGIN
+    INSERT INTO general.gurmail (gurmail_pidm,
+                                 gurmail_system_ind,
+                                 gurmail_aidy_code,
+                                 gurmail_module_code,
+                                 gurmail_letr_code,
+                                 gurmail_date_init,
+                                 gurmail_date_printed,
+                                 gurmail_wait_days,
+                                 gurmail_orig_ind,
+                                 gurmail_user,
+                                 gurmail_init_code)
+         VALUES (TO_NUMBER (p_pidm),
+                 v_system_ind,
+                 p_aidy_code,
+                 v_module_code,
+                 p_letr_code,
+                 SYSDATE,
+                 SYSDATE,
+                 v_wait_days,
+                 v_orig_ind,
+                 v_user,
+                 v_init_code);
+  END p_create_gurmail;
 
   /**
   * Procedure called from CL Connect for Student Forms transactions
