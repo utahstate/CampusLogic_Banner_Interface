@@ -1,4 +1,4 @@
-/* Formatted on 10/31/2022 1:11:31 PM (QP5 v5.388) */
+/* Formatted on 10/31/2022 1:19:30 PM (QP5 v5.388) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -292,17 +292,25 @@ AS
   * Inserts award letter record into GURMAIL
   * merged from LMC-AL 1.3 (locally as 1.5)
   */
-  PROCEDURE p_create_gurmail (p_pidm        NUMBER,
-                              p_aidy_code   VARCHAR2,
-                              p_letr_code   VARCHAR2)
+  PROCEDURE p_create_gurmail (p_pidm                  NUMBER,
+                              p_aidy_code             VARCHAR2,
+                              p_eventNotificationId   INTEGER)
   AS
     v_system_ind    CONSTANT VARCHAR2 (1) := 'R';
     v_module_code   CONSTANT VARCHAR2 (1) := NULL;           --LMC-AL used 'R'
+    v_letr_code              VARCHAR2 (15) := NULL;
     v_wait_days     CONSTANT NUMBER := NULL;
     v_orig_ind      CONSTANT VARCHAR2 (1) := 'S';            --LMC-AL used 'E'
     v_user          CONSTANT VARCHAR2 (60) := 'Z_CLCONNECT';
     v_init_code     CONSTANT VARCHAR2 (1) := NULL;
   BEGIN
+    --lookup the appropriate letter code
+    SELECT zclmail_letr_code
+      INTO v_letr_code
+      FROM zclmail
+     WHERE     zclmail_eventNotificationId = p_eventNotificationId
+           AND zclmail_aidy_code = p_aidy_code;
+
     INSERT INTO general.gurmail (gurmail_pidm,
                                  gurmail_system_ind,
                                  gurmail_aidy_code,
@@ -318,13 +326,28 @@ AS
                  v_system_ind,
                  p_aidy_code,
                  v_module_code,
-                 p_letr_code,
+                 v_letr_code,
                  SYSDATE,
                  SYSDATE,
                  v_wait_days,
                  v_orig_ind,
                  v_user,
                  v_init_code);
+  EXCEPTION
+    WHEN NO_DATA_FOUND
+    THEN
+      DBMS_OUTPUT.PUT_LINE (
+           'ERROR: check ZCLMAIL record for aid year '
+        || p_aidy_code
+        || ' and event '
+        || p_eventNotificationId);
+    WHEN TOO_MANY_ROWS
+    THEN
+      DBMS_OUTPUT.PUT_LINE (
+           'ERROR: check ZCLMAIL record for aid year '
+        || p_aidy_code
+        || ' and event '
+        || p_eventNotificationId);
   END p_create_gurmail;
 
   /**
@@ -990,32 +1013,10 @@ AS
     BEGIN
       --WHEN (p_eventNotificationId IN '501', '502')
 
-      --lookup the appropriate letter code
-      SELECT zclmail_letr_code
-        INTO v_letr_code
-        FROM zclmail
-       WHERE     zclmail_eventNotificationId = p_eventNotificationId
-             AND zclmail_aidy_code = v_aidy_code;
-
       --create the contact record
-      p_create_gurmail (p_pidm        => v_student_pidm,
-                        p_aidy_code   => v_aidy_code,
-                        p_letr_code   => v_letr_code);
-    EXCEPTION
-      WHEN NO_DATA_FOUND
-      THEN
-        DBMS_OUTPUT.PUT_LINE (
-             'ERROR: check ZCLMAIL record for aid year '
-          || v_aidy_code
-          || ' and event '
-          || p_eventNotificationId);
-      WHEN TOO_MANY_ROWS
-      THEN
-        DBMS_OUTPUT.PUT_LINE (
-             'ERROR: check ZCLMAIL record for aid year '
-          || v_aidy_code
-          || ' and event '
-          || p_eventNotificationId);
+      p_create_gurmail (p_pidm                  => v_student_pidm,
+                        p_aidy_code             => v_aidy_code,
+                        p_eventNotificationId   => p_eventNotificationId);
     END;
 
     UPDATE baninst1.zclelog
