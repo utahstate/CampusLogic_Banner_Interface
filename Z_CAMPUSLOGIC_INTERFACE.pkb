@@ -385,7 +385,7 @@ AS
       SELECT spriden_pidm
         INTO v_student_pidm
         FROM spriden
-       WHERE spriden_change_ind IS NULL AND spriden_id = p_studentId;
+       WHERE spriden_change_ind IS NULL AND spriden_id = UPPER(p_studentId);
     EXCEPTION
       WHEN NO_DATA_FOUND
       THEN
@@ -698,7 +698,7 @@ AS
       SELECT spriden_pidm
         INTO v_student_pidm
         FROM spriden
-       WHERE spriden_change_ind IS NULL AND spriden_id = p_studentId;
+       WHERE spriden_change_ind IS NULL AND spriden_id = UPPER(p_studentId);
     EXCEPTION
       WHEN NO_DATA_FOUND
       THEN
@@ -922,7 +922,7 @@ AS
       SELECT spriden_pidm
         INTO v_student_pidm
         FROM spriden
-       WHERE spriden_change_ind IS NULL AND spriden_id = p_studentId;
+       WHERE spriden_change_ind IS NULL AND spriden_id = UPPER(p_studentId);
     EXCEPTION
       WHEN NO_DATA_FOUND
       THEN
