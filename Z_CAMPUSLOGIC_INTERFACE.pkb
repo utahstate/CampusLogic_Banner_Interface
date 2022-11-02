@@ -1,4 +1,4 @@
-/* Formatted on 10/31/2022 1:19:30 PM (QP5 v5.388) */
+/* Formatted on 11/2/2022 9:03:18 AM (QP5 v5.388) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -68,7 +68,7 @@ AS
     3 = PJ Dependency Override Appeal
     4 = PJ EFC Appeal
     5 = Other Documents
-    
+
     DEPENDENT TABLES
     table definitions moved to dependencies.sql
   ****************************************************************************/
@@ -337,7 +337,7 @@ AS
       SELECT spriden_pidm
         INTO v_student_pidm
         FROM spriden
-       WHERE spriden_change_ind IS NULL AND spriden_id = UPPER(p_studentId);
+       WHERE spriden_change_ind IS NULL AND spriden_id = UPPER (p_studentId);
     EXCEPTION
       WHEN NO_DATA_FOUND
       THEN
@@ -402,7 +402,7 @@ AS
                     zclelog_activity,
                     zclelog_processed,
                     zclelog_create_date)
-            VALUES (p_studentId,
+            VALUES (UPPER (p_studentId),
                     v_student_pidm,
                     v_aidy_code,
                     p_eventId,
@@ -573,7 +573,7 @@ AS
           END IF;
 
           --update extender/banner tracking
-          p_update_xtender (p_studentId             => p_studentId,
+          p_update_xtender (p_studentId             => UPPER (p_studentId),
                             p_studentPidm           => v_student_pidm,
                             p_awardYear             => v_aidy_code,
                             p_documentName          => p_sfDocumentName,
@@ -650,7 +650,7 @@ AS
       SELECT spriden_pidm
         INTO v_student_pidm
         FROM spriden
-       WHERE spriden_change_ind IS NULL AND spriden_id = UPPER(p_studentId);
+       WHERE spriden_change_ind IS NULL AND spriden_id = UPPER (p_studentId);
     EXCEPTION
       WHEN NO_DATA_FOUND
       THEN
@@ -710,7 +710,7 @@ AS
                     zclelog_activity,
                     zclelog_processed,
                     zclelog_create_date)
-            VALUES (p_studentId,
+            VALUES (UPPER (p_studentId),
                     v_student_pidm,
                     v_aidy_code,
                     p_eventId,
@@ -874,7 +874,7 @@ AS
       SELECT spriden_pidm
         INTO v_student_pidm
         FROM spriden
-       WHERE spriden_change_ind IS NULL AND spriden_id = UPPER(p_studentId);
+       WHERE spriden_change_ind IS NULL AND spriden_id = UPPER (p_studentId);
     EXCEPTION
       WHEN NO_DATA_FOUND
       THEN
@@ -929,7 +929,7 @@ AS
                     zclelog_activity,
                     zclelog_processed,
                     zclelog_create_date)
-            VALUES (p_studentId,
+            VALUES (UPPER (p_studentId),
                     v_student_pidm,
                     v_aidy_code,
                     p_eventId,
