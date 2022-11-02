@@ -1,4 +1,4 @@
-/* Formatted on 11/2/2022 9:03:18 AM (QP5 v5.388) */
+/* Formatted on 11/2/2022 9:07:54 AM (QP5 v5.388) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -272,6 +272,7 @@ AS
                                  gurmail_date_printed,
                                  gurmail_wait_days,
                                  gurmail_orig_ind,
+                                 gurmail_activity_date,
                                  gurmail_user,
                                  gurmail_init_code)
          VALUES (TO_NUMBER (p_pidm),
@@ -283,6 +284,7 @@ AS
                  SYSDATE,
                  v_wait_days,
                  v_orig_ind,
+                 SYSDATE,
                  v_user,
                  v_init_code);
   EXCEPTION
