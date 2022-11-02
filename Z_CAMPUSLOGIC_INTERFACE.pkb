@@ -1,4 +1,4 @@
-/* Formatted on 1/6/2022 5:21:57 PM (QP5 v5.371) */
+/* Formatted on 11/2/2022 9:11:40 AM (QP5 v5.388) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -34,6 +34,8 @@ AS
     1.3.5    20171205  Steven Francom, USU   updated v_banner_verify_code for clarity
     1.4      20190417  Carl Ellsworth, USU   added handling for 209 events
     1.4.1    20190429  Carl Ellsworth, USU   changed 209 logic to ROBNYUD update
+    1.5      20200616  Carmen Pagán          Added code for inserting
+                                               award email record into gurmail
     2.0.a    20210726  Kevin Le, CCFS        initial work on Scholarship Universe
     2.0      20210802  Autumn Canfield, USU  expansion to accommodate Scholarship Universe
     2.0.1    20210809  Carl & Autumn, USU    logic changes for cl-connect limitations
@@ -49,6 +51,8 @@ AS
                                                canceled scholarships from being visible
     2.1.2    20220622  Autumn Canfield, USU  change 103 and 104 events to update Banner
                                                correctly for all transaction categories
+    2.2.0    20221031  Carl Ellsworth, USU   merged code from Carmen Pagán for use
+                                               integrating with Campus Connector
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -64,58 +68,10 @@ AS
     3 = PJ Dependency Override Appeal
     4 = PJ EFC Appeal
     5 = Other Documents
+
+    DEPENDENT TABLES
+    table definitions moved to dependencies.sql
   ****************************************************************************/
-
-  /* DEPENDENT TABLES
-
-  DROP TABLE BANINST1.ZCLELOG;
-
-  CREATE TABLE BANINST1.ZCLELOG
-  (
-    ZCLELOG_STUDENTID                  VARCHAR2 (9 CHAR),
-    ZCLELOG_AWARDYEAR                  VARCHAR2 (4 CHAR),
-    ZCLELOG_SFTRANSACTIONCATEGORYID    INTEGER,
-    ZCLELOG_EVENTNOTIFICATIONID        INTEGER,
-    ZCLELOG_SFDOCUMENTNAME             VARCHAR2 (100 CHAR),
-    ZCLELOG_PIDM                       NUMBER (8),
-    ZCLELOG_CREATE_DATE                DATE,
-    ZCLELOG_EVENTID                    VARCHAR2 (100 CHAR),
-    ZCLELOG_EVENTNOTIFICATIONNAME      VARCHAR2 (100 CHAR),
-    ZCLELOG_EVENTDATETIME              VARCHAR2 (50 CHAR),
-    ZCLELOG_SUTERMCODE                 VARCHAR2 (6 CHAR),
-    ZCLELOG_SUSCHOLARSHIPAWARDID       VARCHAR2 (30 CHAR),
-    ZCLELOG_SUSCHOLARSHIPNAME          VARCHAR2 (100 CHAR),
-    ZCLELOG_SUSCHOLARSHIPCODE          VARCHAR2 (100 CHAR),
-    ZCLELOG_SUAMOUNT                   NUMBER (11, 2),
-    ZCLELOG_SUPOSTBATCHUSER            VARCHAR2 (100 CHAR),
-    ZCLELOG_SUPOSTTYPE                 VARCHAR2 (30 CHAR),
-    ZCLELOG_SUTERMCOMMENTS             VARCHAR2 (4000 CHAR),
-    ZCLELOG_ACTIVITY                   DATE DEFAULT SYSDATE,
-    ZCLELOG_VERSION                    INTEGER DEFAULT 1,
-    ZCLELOG_PROCESSED                  DATE
-  );
-
-  CREATE TABLE BANINST1.ZCLERRM
-  (
-    ZCLERRM_EVENTID       VARCHAR2 (100),
-    ZCLERRM_CODE          INTEGER,
-    ZCLERRM_MESSAGE       VARCHAR2 (512),
-    ZCLERRM_CREATE_DATE   DATE DEFAULT SYSDATE
-  );
-
-  DROP TABLE BANINST1.ZCLXWLK;
-
-  CREATE TABLE BANINST1.ZCLXWLK
-  (
-     ZCLXWLK_AIDY_CODE      VARCHAR2 (4 CHAR) NOT NULL,
-     ZCLXWLK_TREQ_CODE      VARCHAR2 (6 CHAR),
-     ZCLXWLK_DOCUMENT       VARCHAR2 (100 CHAR) NOT NULL,
-     ZCLXWLK_CAMPUS_LOGIC   VARCHAR2 (1 CHAR) NOT NULL,
-     ZCLXWLK_YEAR_BASED     VARCHAR2 (1 CHAR) NOT NULL,
-     ZCLXWLK_CROSSWALKED    VARCHAR2 (1 CHAR) NOT NULL
-  );
-
-  */
 
   /**
   * Calls the Banner table API for RORSTAT
@@ -284,6 +240,69 @@ AS
     END IF;
   END p_update_xtender;
 
+  /**
+  * Inserts award letter record into GURMAIL
+  * merged from LMC-AL 1.3 (locally as 1.5)
+  */
+  PROCEDURE p_create_gurmail (p_pidm                  NUMBER,
+                              p_aidy_code             VARCHAR2,
+                              p_eventNotificationId   INTEGER)
+  AS
+    v_system_ind    CONSTANT VARCHAR2 (1) := 'R';
+    v_module_code   CONSTANT VARCHAR2 (1) := NULL;           --LMC-AL used 'R'
+    v_letr_code              VARCHAR2 (15) := NULL;
+    v_wait_days     CONSTANT NUMBER := NULL;
+    v_orig_ind      CONSTANT VARCHAR2 (1) := 'S';            --LMC-AL used 'E'
+    v_user          CONSTANT VARCHAR2 (60) := 'Z_CLCONNECT';
+    v_init_code     CONSTANT VARCHAR2 (1) := NULL;
+  BEGIN
+    --lookup the appropriate letter code
+    SELECT zclmail_letr_code
+      INTO v_letr_code
+      FROM zclmail
+     WHERE     zclmail_eventNotificationId = p_eventNotificationId
+           AND zclmail_aidy_code = p_aidy_code;
+
+    INSERT INTO general.gurmail (gurmail_pidm,
+                                 gurmail_system_ind,
+                                 gurmail_letr_code,
+                                 gurmail_module_code,
+                                 gurmail_date_init,
+                                 gurmail_date_printed,
+                                 gurmail_user,
+                                 gurmail_wait_days,
+                                 gurmail_init_code,
+                                 gurmail_orig_ind,
+                                 gurmail_activity_date,
+                                 gurmail_aidy_code)
+         VALUES (TO_NUMBER (p_pidm),
+                 v_system_ind,
+                 v_letr_code,
+                 v_module_code,
+                 SYSDATE,
+                 SYSDATE,
+                 v_user,
+                 v_wait_days,
+                 v_init_code,
+                 v_orig_ind,
+                 SYSDATE,
+                 p_aidy_code);
+  EXCEPTION
+    WHEN NO_DATA_FOUND
+    THEN
+      DBMS_OUTPUT.PUT_LINE (
+           'ERROR: check ZCLMAIL record for aid year '
+        || p_aidy_code
+        || ' and event '
+        || p_eventNotificationId);
+    WHEN TOO_MANY_ROWS
+    THEN
+      DBMS_OUTPUT.PUT_LINE (
+           'ERROR: check ZCLMAIL record for aid year '
+        || p_aidy_code
+        || ' and event '
+        || p_eventNotificationId);
+  END p_create_gurmail;
 
   /**
   * Procedure called from CL Connect for Student Forms transactions
@@ -320,7 +339,7 @@ AS
       SELECT spriden_pidm
         INTO v_student_pidm
         FROM spriden
-       WHERE spriden_change_ind IS NULL AND spriden_id = p_studentId;
+       WHERE spriden_change_ind IS NULL AND spriden_id = UPPER (p_studentId);
     EXCEPTION
       WHEN NO_DATA_FOUND
       THEN
@@ -385,7 +404,7 @@ AS
                     zclelog_activity,
                     zclelog_processed,
                     zclelog_create_date)
-            VALUES (p_studentId,
+            VALUES (UPPER (p_studentId),
                     v_student_pidm,
                     v_aidy_code,
                     p_eventId,
@@ -429,7 +448,12 @@ AS
 
     --BANNER LOGIC
 
-    IF (p_eventNotificationId in (101, 103, 104, 105, 107)) THEN
+    IF (p_eventNotificationId IN (101,
+                                  103,
+                                  104,
+                                  105,
+                                  107))
+    THEN
       CASE
         WHEN (NVL (p_sfTransactionCategoryId, 0) = 1)
         THEN
@@ -447,53 +471,56 @@ AS
       CASE
         -- STUDENT FORMS
         WHEN (p_eventNotificationId = 103)
-        THEN                                     --103 is File Review(see notes)
+        THEN                                   --103 is File Review(see notes)
           p_tracking_upd_api (p_pidm        => v_student_pidm,
                               p_awardYear   => v_aidy_code,
                               p_treqCode    => v_treq_code,
                               p_status      => 'Z',             --from RTVTRST
                               p_sysInd      => 'B');
         WHEN (p_eventNotificationId = 104)
-        THEN                                      --104 is Correction(see notes)
+        THEN                                    --104 is Correction(see notes)
           p_tracking_upd_api (p_pidm        => v_student_pidm,
                               p_awardYear   => v_aidy_code,
                               p_treqCode    => v_treq_code,
                               p_status      => 'Q',             --from RTVTRST
                               p_sysInd      => 'B');
         WHEN (p_eventNotificationId = 105 AND p_sfDocumentName IS NULL)
-        THEN                          --105 is Transaction Completed (see notes)
+        THEN                        --105 is Transaction Completed (see notes)
           p_tracking_upd_api (p_pidm        => v_student_pidm,
                               p_awardYear   => v_aidy_code,
                               p_treqCode    => v_treq_code,
-                              p_status      => 'C',           --from RTVTRST
+                              p_status      => 'C',             --from RTVTRST
                               p_sysInd      => 'B');
-          IF (NVL (p_sfTransactionCategoryId, 0) = 1)     --Student Verification
+
+          IF (NVL (p_sfTransactionCategoryId, 0) = 1)   --Student Verification
           THEN
             p_status_upd_api (p_pidm          => v_student_pidm,
                               p_awardYear     => v_aidy_code,
                               p_verPayInd     => 'V',
                               p_verComplete   => 'Y');
           END IF;
-        WHEN (p_eventNotificationId IN (101, 107) AND p_sfDocumentName IS NULL)
+        WHEN (    p_eventNotificationId IN (101, 107)
+              AND p_sfDocumentName IS NULL)
         THEN
           --101 is Transaction Collect (see notes)
           --107 is Transaction ReCollect (see notes)
           p_tracking_upd_api (p_pidm        => v_student_pidm,
                               p_awardYear   => v_aidy_code,
                               p_treqCode    => v_treq_code,
-                              p_status      => 'N',           --from RTVTRST
+                              p_status      => 'N',             --from RTVTRST
                               p_sysInd      => 'B');
         ELSE
-            NULL;
-        END CASE;
+          NULL;
+      END CASE;
     END IF;
 
-    IF (p_eventNotificationId = 209) THEN
+    IF (p_eventNotificationId = 209)
+    THEN
       --209 is Account Created (see notes)
       UPDATE ROBNYUD
-      SET ROBNYUD_ACTIVITY_DATE = SYSDATE,
-          ROBNYUD_VALUE_3 = v_banner_creation_code
-      WHERE robnyud_pidm = v_student_pidm;
+         SET ROBNYUD_ACTIVITY_DATE = SYSDATE,
+             ROBNYUD_VALUE_3 = v_banner_creation_code
+       WHERE robnyud_pidm = v_student_pidm;
     END IF;
 
 
@@ -548,7 +575,7 @@ AS
           END IF;
 
           --update extender/banner tracking
-          p_update_xtender (p_studentId             => p_studentId,
+          p_update_xtender (p_studentId             => UPPER (p_studentId),
                             p_studentPidm           => v_student_pidm,
                             p_awardYear             => v_aidy_code,
                             p_documentName          => p_sfDocumentName,
@@ -625,7 +652,7 @@ AS
       SELECT spriden_pidm
         INTO v_student_pidm
         FROM spriden
-       WHERE spriden_change_ind IS NULL AND spriden_id = p_studentId;
+       WHERE spriden_change_ind IS NULL AND spriden_id = UPPER (p_studentId);
     EXCEPTION
       WHEN NO_DATA_FOUND
       THEN
@@ -685,7 +712,7 @@ AS
                     zclelog_activity,
                     zclelog_processed,
                     zclelog_create_date)
-            VALUES (p_studentId,
+            VALUES (UPPER (p_studentId),
                     v_student_pidm,
                     v_aidy_code,
                     p_eventId,
@@ -786,7 +813,7 @@ AS
                                     p_accept_amt   => 0,
                                     p_awst_code    => v_awst_code_declined,
                                     p_awst_date    => v_event_date_time);
-      WHEN (p_eventNotificationId = 706 and v_exists != 'N')
+      WHEN (p_eventNotificationId = 706 AND v_exists != 'N')
       --706 removed 'C'
       -- Only attempt to remove scholarships that already exist to prevent $0
       -- canceled scholarships from being created on student's accounts.
@@ -824,5 +851,149 @@ AS
 
       COMMIT;
   END p_su_transaction;
+
+  /**
+  * Procedure called from CL Connect for Campus Connector transactions
+  *
+  * In Web.config on the CL Connect server, populate the field dbCommandFieldValue
+  * with the full path to this procedure, BANINST1.z_campuslogic_interface.p_cc_transaction
+  */
+  PROCEDURE p_cc_transaction (
+    p_studentId               VARCHAR2,
+    p_eventNotificationId     INTEGER,
+    p_eventId                 VARCHAR2 DEFAULT NULL,
+    p_eventNotificationName   VARCHAR2 DEFAULT NULL,
+    p_ccAwardYear             VARCHAR2 DEFAULT NULL)
+  AS
+    v_student_pidm    NUMBER := NULL;
+    v_aidy_code       VARCHAR2 (4) := NULL;
+
+    v_error_code      NUMBER := NULL;
+    v_error_message   VARCHAR2 (511) := NULL;
+  BEGIN
+    --Determine if StudentID matches a single record in Banner
+    BEGIN
+      SELECT spriden_pidm
+        INTO v_student_pidm
+        FROM spriden
+       WHERE spriden_change_ind IS NULL AND spriden_id = UPPER (p_studentId);
+    EXCEPTION
+      WHEN NO_DATA_FOUND
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+          'ERROR: student not found for studentID ' || p_studentId);
+      WHEN TOO_MANY_ROWS
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+          'ERROR: duplicate pidm issue for studentID ' || p_studentId);
+    END;
+
+    --Determine if Aid Year exists in Banner
+    IF p_ccAwardYear IS NOT NULL
+    THEN
+      BEGIN
+        SELECT robinst_aidy_code
+          INTO v_aidy_code
+          FROM robinst
+         WHERE robinst_aidy_code = p_ccAwardYear;
+      EXCEPTION
+        WHEN NO_DATA_FOUND
+        THEN
+          v_aidy_code := NULL;
+          DBMS_OUTPUT.PUT_LINE (
+            'ERROR: award year is invalid: ' || p_ccAwardYear);
+        WHEN TOO_MANY_ROWS
+        THEN
+          v_aidy_code := NULL;
+          DBMS_OUTPUT.PUT_LINE (
+            'ERROR: award year is invalid: ' || p_ccAwardYear);
+      END;
+    END IF;
+
+    --log the incoming transaction
+    BEGIN
+      MERGE INTO baninst1.zclelog
+           USING DUAL
+              ON (zclelog_eventid = p_eventId)
+      WHEN MATCHED
+      THEN
+        UPDATE SET
+          zclelog_activity = SYSDATE, zclelog_version = zclelog_version + 1
+      WHEN NOT MATCHED
+      THEN
+        INSERT     (zclelog_studentid,
+                    zclelog_pidm,
+                    zclelog_awardyear,
+                    zclelog_eventid,
+                    zclelog_eventnotificationname,
+                    zclelog_eventdatetime,
+                    zclelog_eventnotificationid,
+                    zclelog_activity,
+                    zclelog_processed,
+                    zclelog_create_date)
+            VALUES (UPPER (p_studentId),
+                    v_student_pidm,
+                    v_aidy_code,
+                    p_eventId,
+                    p_eventNotificationName,
+                    NULL,
+                    p_eventNotificationId,
+                    SYSDATE,
+                    NULL,
+                    SYSDATE);
+
+      COMMIT;
+    EXCEPTION
+      WHEN OTHERS
+      THEN
+        DBMS_OUTPUT.PUT_LINE (
+          'ERROR: failed to insert event notification into ZCLELOG');
+    END;
+
+    -- Custom Error Block
+    IF v_student_pidm IS NULL
+    THEN
+      raise_application_error (
+        -20404,
+        'ERROR: student pidm not found for ' || p_studentId);
+    ELSIF p_ccAwardYear IS NULL
+    THEN
+      raise_application_error (
+        -20400,
+        'ERROR: award year is required to process transaction');
+    END IF;
+
+    --BANNER LOGIC
+    BEGIN
+      --WHEN (p_eventNotificationId IN '501', '502')
+
+      --create the contact record
+      p_create_gurmail (p_pidm                  => v_student_pidm,
+                        p_aidy_code             => v_aidy_code,
+                        p_eventNotificationId   => p_eventNotificationId);
+    END;
+
+    UPDATE baninst1.zclelog
+       SET zclelog_processed = SYSDATE
+     WHERE zclelog_eventid = p_eventId;
+
+    COMMIT;
+  EXCEPTION
+    WHEN OTHERS
+    THEN
+      v_error_code := SQLCODE;
+      v_error_message := SUBSTR (SQLERRM, 0, 510);
+
+      INSERT INTO baninst1.zclerrm (zclerrm_eventid,
+                                    zclerrm_code,
+                                    zclerrm_message,
+                                    zclerrm_create_date)
+           VALUES (p_eventId,
+                   v_error_code,
+                   v_error_message,
+                   SYSDATE);
+
+      COMMIT;
+  END p_cc_transaction;
 END z_campuslogic_interface;
 /
