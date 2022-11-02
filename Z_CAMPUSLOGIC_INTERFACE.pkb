@@ -1,4 +1,4 @@
-/* Formatted on 11/2/2022 9:07:54 AM (QP5 v5.388) */
+/* Formatted on 11/2/2022 9:11:40 AM (QP5 v5.388) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_campuslogic_interface
 AS
   /****************************************************************************
@@ -265,28 +265,28 @@ AS
 
     INSERT INTO general.gurmail (gurmail_pidm,
                                  gurmail_system_ind,
-                                 gurmail_aidy_code,
-                                 gurmail_module_code,
                                  gurmail_letr_code,
+                                 gurmail_module_code,
                                  gurmail_date_init,
                                  gurmail_date_printed,
+                                 gurmail_user,
                                  gurmail_wait_days,
+                                 gurmail_init_code,
                                  gurmail_orig_ind,
                                  gurmail_activity_date,
-                                 gurmail_user,
-                                 gurmail_init_code)
+                                 gurmail_aidy_code)
          VALUES (TO_NUMBER (p_pidm),
                  v_system_ind,
-                 p_aidy_code,
-                 v_module_code,
                  v_letr_code,
+                 v_module_code,
                  SYSDATE,
-                 SYSDATE,
-                 v_wait_days,
-                 v_orig_ind,
                  SYSDATE,
                  v_user,
-                 v_init_code);
+                 v_wait_days,
+                 v_init_code,
+                 v_orig_ind,
+                 SYSDATE,
+                 p_aidy_code);
   EXCEPTION
     WHEN NO_DATA_FOUND
     THEN
