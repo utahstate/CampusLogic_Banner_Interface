@@ -53,6 +53,7 @@ AS
                                                correctly for all transaction categories
     2.2.0    20221031  Carl Ellsworth, USU   merged code from Carmen Pagán for use
                                                integrating with Campus Connector
+                                               integrating with Campus Communicator
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -853,7 +854,7 @@ AS
   END p_su_transaction;
 
   /**
-  * Procedure called from CL Connect for Campus Connector transactions
+  * Procedure called from CL Connect for Campus Communicator transactions
   *
   * In Web.config on the CL Connect server, populate the field dbCommandFieldValue
   * with the full path to this procedure, BANINST1.z_campuslogic_interface.p_cc_transaction
