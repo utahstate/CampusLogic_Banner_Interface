@@ -54,6 +54,7 @@ AS
     2.2.0    20221031  Carl Ellsworth, USU   merged code from Carmen Pagán for use
                                                integrating with Campus Connector
                                                integrating with Campus Communicator
+    2.2.0    20221031  Autumn Canfield, USU  added support for 701 Cancel events
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -778,6 +779,20 @@ AS
 
     --BANNER LOGIC
     CASE
+      WHEN (p_eventNotificationId = 701 AND v_exists != 'N' AND p_suPostType = 'Cancel')
+      --701 posted (catch-all) 'C'
+      -- Only attempt to remove scholarships that already exist to prevent $0
+      -- canceled scholarships from being created on student's accounts.
+      THEN
+        rp_award_schedule.p_update (p_aidy_code    => v_aidy_code,
+                                    p_pidm         => v_student_pidm,
+                                    p_fund_code    => p_suScholarshipCode,
+                                    p_period       => v_term,
+                                    p_term_code    => v_term,
+                                    p_offer_amt    => 0,
+                                    p_accept_amt   => 0,
+                                    p_awst_code    => v_awst_code_cancelled,
+                                    p_awst_date    => v_event_date_time);
       WHEN (p_eventNotificationId = 703)
       --703 offered 'O'
       THEN
