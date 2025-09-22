@@ -36,6 +36,7 @@ AS
     p_eventNotificationId     INTEGER,
     p_eventId                 VARCHAR2 DEFAULT NULL,
     p_eventNotificationName   VARCHAR2 DEFAULT NULL,
-    p_ccAwardYear             VARCHAR2 DEFAULT NULL);
+    p_ccAwardYear             VARCHAR2 DEFAULT NULL,
+    p_alTemplateType          VARCHAR2 DEFAULT NULL);
 END z_campuslogic_interface;
 /
