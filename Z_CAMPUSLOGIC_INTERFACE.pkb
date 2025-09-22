@@ -54,7 +54,9 @@ AS
     2.2.0    20221031  Carl Ellsworth, USU   merged code from Carmen Pagán for use
                                                integrating with Campus Connector
                                                integrating with Campus Communicator
-    2.2.0    20221031  Autumn Canfield, USU  added support for 701 Cancel events
+    2.3.0    20221031  Autumn Canfield, USU  added support for 701 Cancel events
+    2.4.0    20250922  Autumn Canfield, USU  added support for alTemplateType for
+                                               Campus Communicator events
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -248,7 +250,8 @@ AS
   */
   PROCEDURE p_create_gurmail (p_pidm                  NUMBER,
                               p_aidy_code             VARCHAR2,
-                              p_eventNotificationId   INTEGER)
+                              p_eventNotificationId   INTEGER,
+                              p_alTemplateType        VARCHAR2)
   AS
     v_system_ind    CONSTANT VARCHAR2 (1) := 'R';
     v_module_code   CONSTANT VARCHAR2 (1) := NULL;           --LMC-AL used 'R'
@@ -263,7 +266,8 @@ AS
       INTO v_letr_code
       FROM zclmail
      WHERE     zclmail_eventNotificationId = p_eventNotificationId
-           AND zclmail_aidy_code = p_aidy_code;
+           AND zclmail_aidy_code = p_aidy_code
+           AND zclmail_alTemplateType = p_alTemplateType;
 
     INSERT INTO general.gurmail (gurmail_pidm,
                                  gurmail_system_ind,
@@ -879,7 +883,8 @@ AS
     p_eventNotificationId     INTEGER,
     p_eventId                 VARCHAR2 DEFAULT NULL,
     p_eventNotificationName   VARCHAR2 DEFAULT NULL,
-    p_ccAwardYear             VARCHAR2 DEFAULT NULL)
+    p_ccAwardYear             VARCHAR2 DEFAULT NULL,
+    p_alTemplateType          VARCHAR2 DEFAULT NULL)
   AS
     v_student_pidm    NUMBER := NULL;
     v_aidy_code       VARCHAR2 (4) := NULL;
@@ -944,6 +949,7 @@ AS
                     zclelog_eventnotificationname,
                     zclelog_eventdatetime,
                     zclelog_eventnotificationid,
+                    zclelog_altemplatetype,
                     zclelog_activity,
                     zclelog_processed,
                     zclelog_create_date)
@@ -954,6 +960,7 @@ AS
                     p_eventNotificationName,
                     NULL,
                     p_eventNotificationId,
+                    p_alTemplateType,
                     SYSDATE,
                     NULL,
                     SYSDATE);
@@ -986,7 +993,8 @@ AS
       --create the contact record
       p_create_gurmail (p_pidm                  => v_student_pidm,
                         p_aidy_code             => v_aidy_code,
-                        p_eventNotificationId   => p_eventNotificationId);
+                        p_eventNotificationId   => p_eventNotificationId,
+                        p_alTemplateType        => p_alTemplateType);
     END;
 
     UPDATE baninst1.zclelog
