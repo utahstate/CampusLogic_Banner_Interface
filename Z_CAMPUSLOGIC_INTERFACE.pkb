@@ -57,6 +57,7 @@ AS
     2.3.0    20221031  Autumn Canfield, USU  added support for 701 Cancel events
     2.4.0    20250922  Autumn Canfield, USU  added support for alTemplateType for
                                                Campus Communicator events
+    2.4.1    20260611  Autumn Canfield, USU  patch to help prevent primary key errors on RPRAWRD
 
     NOTES:
     Reference this documentation for various p_eventNotificationId codes
@@ -337,8 +338,7 @@ AS
     v_banner_verify_code              rrrareq.rrrareq_treq_code%TYPE := 'CLOGIC';
     v_banner_sap_code        CONSTANT rrrareq.rrrareq_treq_code%TYPE := 'SAP';
     v_banner_pj_code         CONSTANT rrrareq.rrrareq_treq_code%TYPE := 'PROJUD';
-    v_banner_creation_code   CONSTANT rrrareq.rrrareq_treq_code%TYPE
-                                        := 'ACCTCL' ;
+    v_banner_creation_code   CONSTANT rrrareq.rrrareq_treq_code%TYPE := 'ACCTCL';
   BEGIN
     --Determine if StudentID matches a single record in Banner
     BEGIN
@@ -770,16 +770,30 @@ AS
                          p_fund_code   => p_suScholarshipCode);
 
     -- Only create scholarship record if it doesn't exist and is not being removed.
-    IF (v_exists = 'N' AND p_eventNotificationId != 706)
-    THEN
-      rp_award.p_create (p_aidy_code              => v_aidy_code,
-                         p_pidm                   => v_student_pidm,
-                         p_fund_code              => p_suScholarshipCode,
-                         p_offer_amt              => 0, --load zero first to get override indicator set to Y
-                         p_unmet_need_ovrde_ind   => 'Y',
-                         p_awst_code              => v_awst_code_offered,
-                         p_awst_date              => v_event_date_time);
-    END IF;
+    BEGIN
+      IF (v_exists = 'N' AND p_eventNotificationId != 706)
+      THEN
+        rp_award.p_create (p_aidy_code              => v_aidy_code,
+                           p_pidm                   => v_student_pidm,
+                           p_fund_code              => p_suScholarshipCode,
+                           p_offer_amt              => 0, --load zero first to get override indicator set to Y
+                           p_unmet_need_ovrde_ind   => 'Y',
+                           p_awst_code              => v_awst_code_offered,
+                           p_awst_date              => v_event_date_time);
+      END IF;
+    EXCEPTION
+      WHEN OTHERS
+      THEN
+        -- Check again in case rp_award.p_create failed because of a race condition when multiple terms are processed at the same time.
+        v_exists :=
+          rp_award.f_exists (p_aidy_code   => v_aidy_code,
+                             p_pidm        => v_student_pidm,
+                             p_fund_code   => p_suScholarshipCode);
+        IF (v_exists = 'N' AND p_eventNotificationId != 706)
+        THEN
+          RAISE;
+        END IF;
+    END;
 
     --BANNER LOGIC
     CASE
