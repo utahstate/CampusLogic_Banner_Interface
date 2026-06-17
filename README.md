@@ -83,10 +83,9 @@ CLCONNECT Integration Documentation
 
 ## Technical Team
 
-- Carl Ellsworth <carl.ellsworth@usu.edu> (IT, SIS Developer)
 - Autumn Canfield <Autumn.canfield@usu.edu> (IT, Integration Developer)
 - Steven Francom <steven.francom@usu.edu> (Financial Aid)
-- Aaron Weitzell <aaron.weitzell@campuslogic.com> (Integration Manager)
+- Aaron Weitzell <aaron.weitzell@ellucian.com> (Integration Manager)
 - Vince Vaughn <vince.vaughn@campuslogic.com> (Progect Manager)
 
 ---
